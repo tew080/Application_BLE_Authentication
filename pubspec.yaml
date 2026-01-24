@@ -48,9 +48,9 @@ dev_dependencies:
 
   #Add Firebase Support
   # ใช้สำหรับเชื่อมต่อ Firebase Core
-  firebase_core: ^4.2.1
+  firebase_core: ^4.3.0
   # ใช้สำหรับฐานข้อมูล Firestore
-  cloud_firestore: ^6.1.0
+  cloud_firestore: ^6.1.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
