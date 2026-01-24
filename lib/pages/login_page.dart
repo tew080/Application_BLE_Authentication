@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+// นำเข้า AuthenticationService
+import '../services/authentication_service.dart';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -21,12 +24,41 @@ class _LoginPageState extends State<LoginPage> {
   final passwordCtrl = TextEditingController();
 
   void _checkLoginState() async {
+    // ค่าที่รับมาจาก studentIdCtrl และ passwordCtrl จะต้องไม่เป็นค่าว่าง
+    if (studentIdCtrl.text.isEmpty || passwordCtrl.text.isEmpty) {
+      setState(() {
+        error = '*กรุณากรอกข้อมูลให้ครบถ้วน*';
+      });
+      return; // จบการทำงานทันทีถ้าข้อมูลว่าง
+    }
+
     setState(() {
       // ให้เซ็ตตัวแปร loading = true เพื่อป้องกันการกดปุ่ม Login ซ้ำ
       loading = true;
       // ให้เซ็ตตัวแปร error = '' เพื่อเคลียร์ข้อความ error ที่แสดง
       error = '';
     });
+
+    // ดึงค่าจากช่องกรอก และลบช่องว่าง (Whitespace) ออกทั้งหมด
+    final String studentId = studentIdCtrl.text.replaceAll(RegExp(r'\s+'), '');
+    // ดึงค่ารหัสผ่าน และตัดช่องว่างหน้า-หลัง
+    final String password = passwordCtrl.text.trim();
+
+    // เรียก AuthService เพื่อตรวจสอบข้อมูล
+    final bool ok = await AuthenticationService.login(studentId, password);
+
+    if (ok == true) {
+      debugPrint("Login Successfully Status = ${ok}");
+    }
+
+    /*  mounted T/F from class State
+     -  ถ้า (!mounted) แปลว่า "ถ้าหน้าจอนี้ไม่อยู่แล้ว"
+     - ให้จบการทำงานตรงนี้เลย ไม่ต้องทำบรรทัดล่างต่อ
+    */
+    if (!mounted) {
+      debugPrint('Login Page ${mounted}');
+      return;
+    }
 
     setState(() {
       // ให้เซ็ตตัวแปร loading = false เพื่อที่อนุญาตให้กดปุ่ม Login อีกครั้ง
@@ -39,7 +71,7 @@ class _LoginPageState extends State<LoginPage> {
       studentIdCtrl.clear();
       passwordCtrl.clear();
     });
-    debugPrint('Login Page ${loading}');
+    debugPrint('Loading Status ${loading}');
   }
 
   @override
