@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 // นำเข้า AuthenticationService
 import '../services/authentication_service.dart';
 
+// นำเข้า LogdebugService
+import '../services/logdebug_service.dart';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -48,7 +51,7 @@ class _LoginPageState extends State<LoginPage> {
     final bool ok = await AuthenticationService.login(studentId, password);
 
     if (ok == true) {
-      debugPrint("Login Successfully Status = ${ok}");
+      log("Login Successfully Status = ${ok}");
     }
 
     /*  mounted T/F from class State
@@ -56,7 +59,7 @@ class _LoginPageState extends State<LoginPage> {
      - ให้จบการทำงานตรงนี้เลย ไม่ต้องทำบรรทัดล่างต่อ
     */
     if (!mounted) {
-      debugPrint('Login Page ${mounted}');
+      log('Login Page ${mounted}');
       return;
     }
 
@@ -71,7 +74,7 @@ class _LoginPageState extends State<LoginPage> {
       studentIdCtrl.clear();
       passwordCtrl.clear();
     });
-    debugPrint('Loading Status ${loading}');
+    log('Loading Status ${loading}');
   }
 
   @override

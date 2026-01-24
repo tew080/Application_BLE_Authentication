@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
-
 // นำเข้า FirestoreService เพื่อดึงข้อมูล User
 import 'firestore_service.dart';
+
+// นำเข้า LogdebugService
+import '../services/logdebug_service.dart';
 
 class AuthenticationService {
   // ฟังก์ชันสำหรับเข้าสู่ระบบ (Login)
@@ -20,10 +21,9 @@ class AuthenticationService {
       return false;
     }
 
-    debugPrint("[DEBUG] LOGIN studentId='$studentId'");
-    debugPrint("[DEBUG] PASSWORD from input='$password'");
-
-    debugPrint("[DEBUG] DB PASSWORD = ${doc['password']}");
+    log("LOGIN studentId='$studentId'");
+    log("PASSWORD from input='$password'");
+    log("DB PASSWORD = ${doc['password']}");
 
     // ตรวจสอบรหัสผ่าน:
     // แปลงรหัสผ่านจาก DB เป็น String และเปรียบเทียบกับ password ที่กรอกมา
