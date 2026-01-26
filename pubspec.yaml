@@ -52,6 +52,18 @@ dev_dependencies:
   # ใช้สำหรับฐานข้อมูล Firestore
   cloud_firestore: ^6.1.1
 
+  # Add icon app
+  flutter_launcher_icons: ^0.13.1
+
+# Add icon app
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/icon.png"
+  min_sdk_android: 21 # ช่วยเรื่อง Adaptive Icon
+  adaptive_icon_background: "#121212" # สีพื้นหลัง (ดำ) ถ้าเป็น icon แบบใหม่
+  adaptive_icon_foreground: "assets/icon/icon.png" # รูป icon หลัก
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
