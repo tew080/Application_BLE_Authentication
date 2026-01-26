@@ -35,17 +35,6 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
-  flutter_lints: ^6.0.0
-
   #Add Firebase Support
   # ใช้สำหรับเชื่อมต่อ Firebase Core
   firebase_core: ^4.3.0
@@ -63,6 +52,17 @@ flutter_launcher_icons:
   min_sdk_android: 21 # ช่วยเรื่อง Adaptive Icon
   adaptive_icon_background: "#121212" # สีพื้นหลัง (ดำ) ถ้าเป็น icon แบบใหม่
   adaptive_icon_foreground: "assets/icon/icon.png" # รูป icon หลัก
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
