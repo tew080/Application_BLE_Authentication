@@ -6,6 +6,9 @@ import '../services/authentication_service.dart';
 // นำเข้า LogdebugService
 import '../services/logdebug_service.dart';
 
+// นำเข้าหน้า BleAdvertisePage
+import 'bleadvertise_page.dart';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -52,6 +55,17 @@ class _LoginPageState extends State<LoginPage> {
 
     if (ok == true) {
       log("Login Successfully Status = ${ok}");
+      // เปลี่ยนหน้าไปที่ AdvertisePage และปิดหน้า Login ทิ้ง (Back ไม่ได้)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) {
+            return AdvertisePage(studentId: studentId);
+          },
+        ),
+      );
+      // จบการทำงาน
+      return;
     }
 
     /*  mounted T/F from class State
