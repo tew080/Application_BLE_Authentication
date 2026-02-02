@@ -1,7 +1,5 @@
 // นำเข้าเพื่อใช้ MethodChannel
 import 'package:flutter/services.dart';
-// นำเข้าตัวช่วยแปลง String เป็น Hex
-import '../utils/converter_utils.dart';
 // นำเข้า LogdebugService
 import '../services/logdebug_service.dart';
 
@@ -20,19 +18,13 @@ class BleService {
     bool txpowerlevel = false;
 
     // แสดง Log ค่า Key ก่อนทำการเข้ารหัส
-    log("Key BLE Before Encode = $bleKey");
+    log("Key BLE = $bleKey");
 
     // ตรวจสอบว่า Key เป็นค่าว่างหรือไม่
     if (bleKey.isEmpty) {
       // ถ้าว่าง ให้จบการทำงานทันที
       return;
     }
-
-    // แปลง String Key ให้เป็น Hex String โดยใช้ Converter
-    final String hexData = stringToAsciiHex(bleKey);
-
-    // แสดง Log ค่า Key หลังเข้ารหัสแล้ว
-    log("Key BLE After Encode = $hexData");
 
     // ส่งคำสั่งไปยัง Native Android ผ่าน MethodChannel
     await channel.invokeMethod('startAdvertising', {
@@ -41,7 +33,7 @@ class BleService {
       // Company ID (ใช้ 0xFFFF สำหรับการทดสอบ)
       'companyId': companyID,
       // ข้อมูล Data ที่แปลงเป็น Hex แล้ว
-      'data': hexData,
+      'data': bleKey,
       // ส่งชื่ออุปกรณ์
       'devicename': devicename,
       // กำหนดว่าไม่ต้องให้ใครมาเชื่อมต่อ (Connectable = false)
