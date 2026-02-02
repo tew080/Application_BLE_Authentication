@@ -173,7 +173,7 @@ class MainActivity : FlutterActivity() {
 
         val uuid = ParcelUuid.fromString(args["uuid"] as String)
         val companyId = args["companyId"] as Int
-        val dataHex = args["data"] as String
+        val blekey = args["data"] as String
         val devicename = args["devicename"] as Boolean
         val connectable = args["connectable"] as Boolean
         val txpowerlevel = args["txpowerlevel"] as Boolean
@@ -195,7 +195,7 @@ class MainActivity : FlutterActivity() {
 
         val data = AdvertiseData.Builder()
             .addServiceUuid(uuid)
-            .addManufacturerData(companyId, hexStringToByteArray(dataHex))
+            .addManufacturerData(companyId, stringToByteArray(blekey))
             .setIncludeDeviceName(connectable)
             .setIncludeTxPowerLevel(txpowerlevel)
             .build()
@@ -223,17 +223,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Hex to ByteArray
-    private fun hexStringToByteArray(s: String): ByteArray {
-        val len = s.length
-        val data = ByteArray(len / 2)
-        var i = 0
-        while (i < len) {
-            data[i / 2] =
-                ((Character.digit(s[i], 16) shl 4)
-                        + Character.digit(s[i + 1], 16)).toByte()
-            i += 2
-        }
-        return data
+    private fun stringToByteArray(keyString: String): ByteArray {
+        return keyString.hexToByteArray()
     }
 }
