@@ -11,6 +11,10 @@ import '../services/bleadvertise_service.dart';
 // นำเข้า LogdebugService
 import '../services/logdebug_service.dart';
 
+import '../services/randomkey_service.dart';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 class AdvertisePage extends StatefulWidget {
   // รับรหัสนักศึกษาเข้ามา
   final String studentId;
@@ -41,6 +45,10 @@ class _AdvertisePageState extends State<AdvertisePage> {
   // เวลาพักสัญญาณ (4 วินาที)
   static const Duration _burstOff = Duration(seconds: 4);
 
+  static const storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
   @override
   void initState() {
     super.initState();
@@ -63,18 +71,36 @@ class _AdvertisePageState extends State<AdvertisePage> {
   void _subscribeToUserStream() {
     _userSubscription = FirestoreService()
         .getUserStream(widget.studentId)
-        .listen((snapshot) {
+        .listen((snapshot) async {
           // ถ้าไม่มีข้อมูล ให้จบการทำงาน
           if (!snapshot.exists) {
             return;
           }
 
           // แปลงข้อมูลเป็น Map
-          final data = snapshot.data() as Map<String, dynamic>;
+          //final data = snapshot.data() as Map<String, dynamic>;
 
           // ดึง Key จากฟิลด์ 'key' หรือ 'ble_key'
-          final String newKey =
-              data['key']?.toString() ?? data['ble_key']?.toString() ?? "";
+          /*final String newKey =
+              data['key']?.toString() ?? data['ble_key']?.toString() ?? "";*/
+
+          log('newKey Start');
+          final String secretKey = RandomKeyService.getHex(6);
+          await storage.write(key: 'my_secret_key', value: secretKey);
+          //storage.write(key: 'device_uuid', value: 'feaa-0000...');
+          log('บันทึกข้อมูลลงเซฟเรียบร้อย');
+          //String? newKey = storage.read(key: 'my_secret_key').toString();
+
+          String? readResult = await storage.read(key: 'my_secret_key');
+          String newKey = readResult ?? ""; // ถ้าอ่านไม่ได้ ให้เป็นค่าว่าง
+
+          if (newKey != null) {
+            log('รหัสลับคือ: $newKey');
+          } else {
+            log('ไม่พบรหัสลับ');
+          }
+
+          log('newKey End :$newKey');
 
           // ถ้า Key ว่างเปล่า ให้จบการทำงาน
           if (newKey.isEmpty) {

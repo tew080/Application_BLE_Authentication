@@ -8,7 +8,8 @@ class AuthenticationService {
   // ฟังก์ชันสำหรับเข้าสู่ระบบ (Login)
   // รับค่า studentId และ password เข้ามา
   // คืนค่าเป็น Future<bool> (จริง/เท็จ)
-  static Future<bool> login(String studentId, String password) async {
+  //static Future<bool> login(String studentId, String password) async {
+  static Future<bool> login(String studentId) async {
     // สร้าง Instance ของ FirestoreService เพื่อใช้งาน
     final FirestoreService firestoreService = FirestoreService();
 
@@ -22,17 +23,18 @@ class AuthenticationService {
     }
 
     log("LOGIN studentId='$studentId'");
-    log("PASSWORD from input='$password'");
+    //log("PASSWORD from input='$password'");
     log("DB PASSWORD = ${doc['password']}");
 
     // ตรวจสอบรหัสผ่าน:
     // แปลงรหัสผ่านจาก DB เป็น String และเปรียบเทียบกับ password ที่กรอกมา
-    if (doc['password'].toString() == password) {
+    /*if (doc['password'].toString() == password) {
       // ถ้าตรงกัน คืนค่า true (Login สำเร็จ)
       return true;
     } else {
       // ถ้าไม่ตรงกัน คืนค่า false
       return false;
-    }
+    }*/
+    return true;
   }
 }
