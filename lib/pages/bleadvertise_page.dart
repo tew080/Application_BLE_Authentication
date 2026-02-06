@@ -11,6 +11,8 @@ import '../services/bleadvertise_service.dart';
 // นำเข้า LogdebugService
 import '../services/logdebug_service.dart';
 
+import '../services/generatekey_service.dart';
+
 // นำเข้าไลบรารี Flutter Secure Storage เพื่ออ่านหรือจัดเก็บข้อมูลในเครื่อง
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -44,6 +46,10 @@ class _AdvertisePageState extends State<AdvertisePage> {
   // เวลาพักสัญญาณ (4 วินาที)
   static const Duration _burstOff = Duration(seconds: 4);
 
+  static const storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
   @override
   void initState() {
     super.initState();
@@ -66,18 +72,26 @@ class _AdvertisePageState extends State<AdvertisePage> {
   void _subscribeToUserStream() {
     _userSubscription = FirestoreService()
         .getUserStream(widget.studentId)
-        .listen((snapshot) {
+        .listen((snapshot) async {
           // ถ้าไม่มีข้อมูล ให้จบการทำงาน
           if (!snapshot.exists) {
             return;
           }
+          log('newKey Start');
+          final String secretKey = generateKey(6);
+          await storage.write(key: 'my_secret_key', value: secretKey);
+          log('บันทึกข้อมูลลงเซฟเรียบร้อย');
 
-          // แปลงข้อมูลเป็น Map
-          final data = snapshot.data() as Map<String, dynamic>;
+          String? readResult = await storage.read(key: 'my_secret_key');
+          String newKey = readResult ?? ""; // ถ้าอ่านไม่ได้ ให้เป็นค่าว่าง
 
-          // ดึง Key จากฟิลด์ 'key' หรือ 'ble_key'
-          final String newKey =
-              data['key']?.toString() ?? data['ble_key']?.toString() ?? "";
+          if (newKey != null) {
+            log('รหัสลับคือ: $newKey');
+          } else {
+            log('ไม่พบรหัสลับ');
+          }
+
+          log('newKey End :$newKey');
 
           // ถ้า Key ว่างเปล่า ให้จบการทำงาน
           if (newKey.isEmpty) {

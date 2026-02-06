@@ -1,9 +1,6 @@
 // นำเข้า FirestoreService เพื่อดึงข้อมูล User
 import 'firestore_service.dart';
 
-// นำเข้า LogdebugService
-import '../services/logdebug_service.dart';
-
 // นำเข้าไลบรารี Flutter Secure Storage เพื่อจัดเก็บข้อมูลในเครื่อง
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -11,12 +8,14 @@ class AuthenticationService {
   // ฟังก์ชันสำหรับเข้าสู่ระบบ (Login)
   // รับค่า studentId และ password เข้ามา
   // คืนค่าเป็น Future<bool> (จริง/เท็จ)
-  static Future<bool> login(String studentId, String password) async {
+  //static Future<bool> login(String studentId, String password) async {
+  static Future<bool> login(String studentId) async {
     // สร้าง FlutterSecureStorage เพื่อจัดเก็บข้อมูลในเครื่อง
     const storage = FlutterSecureStorage(
       // encryptedSharedPreferences = true เพื่อเข้ารหัสข้อมูลที่จัดเก็บในเครื่อง
       aOptions: AndroidOptions(encryptedSharedPreferences: true),
     );
+
     // สร้าง Instance ของ FirestoreService เพื่อใช้งาน
     final FirestoreService firestoreService = FirestoreService();
 
@@ -31,19 +30,6 @@ class AuthenticationService {
 
     // ถ้ามีข้อมูล ให้เขียน studentId ลงใน Storage
     await storage.write(key: 'student_id', value: studentId);
-
-    log("LOGIN studentId='$studentId'");
-    log("PASSWORD from input='$password'");
-    log("DB PASSWORD = ${doc['password']}");
-
-    // ตรวจสอบรหัสผ่าน:
-    // แปลงรหัสผ่านจาก DB เป็น String และเปรียบเทียบกับ password ที่กรอกมา
-    if (doc['password'].toString() == password) {
-      // ถ้าตรงกัน คืนค่า true (Login สำเร็จ)
-      return true;
-    } else {
-      // ถ้าไม่ตรงกัน คืนค่า false
-      return false;
-    }
+    return true;
   }
 }
