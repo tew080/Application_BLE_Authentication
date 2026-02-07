@@ -11,6 +11,9 @@ import '../services/bleadvertise_service.dart';
 // นำเข้า LogdebugService
 import '../services/logdebug_service.dart';
 
+// นำเข้าไลบรารี Flutter Secure Storage เพื่ออ่านหรือจัดเก็บข้อมูลในเครื่อง
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 class AdvertisePage extends StatefulWidget {
   // รับรหัสนักศึกษาเข้ามา
   final String studentId;
@@ -102,6 +105,12 @@ class _AdvertisePageState extends State<AdvertisePage> {
   }
 
   Future<void> logout() async {
+    // สร้าง FlutterSecureStorage เพื่อลบข้อมูลทั้งหมดในเครื่อง
+    const storage = FlutterSecureStorage(
+      // encryptedSharedPreferences = true เพื่อเข้ารหัสข้อมูลที่จัดเก็บในเครื่อง
+      aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    );
+
     _bleRefreshTimer?.cancel();
     // หยุดส่งสัญญาณ Bluetooth ทันที (สำคัญมาก)
     await BleService.stopAdvertising();
@@ -110,6 +119,9 @@ class _AdvertisePageState extends State<AdvertisePage> {
     // ยกเลิกการดักฟัง Database
     _userSubscription?.cancel();
     log("Cancel Database");
+
+    // ลบข้อมูลทั้งหมดใน Storage
+    await storage.deleteAll();
 
     // กลับไปหน้า Login และล้าง Stack เดิมทิ้ง (กด Back กลับมาไม่ได้)
     if (mounted) {
