@@ -10,7 +10,7 @@ import 'login_page.dart';
 import '../services/bleadvertise_service.dart';
 // นำเข้า LogdebugService
 import '../services/logdebug_service.dart';
-
+// นำเข้า GenerateKeyService สำหรับการสร้างคีย์
 import '../services/generatekey_service.dart';
 
 // นำเข้าไลบรารี Flutter Secure Storage เพื่ออ่านหรือจัดเก็บข้อมูลในเครื่อง
@@ -77,18 +77,34 @@ class _AdvertisePageState extends State<AdvertisePage> {
           if (!snapshot.exists) {
             return;
           }
-          log('newKey Start');
-          final String secretKey = generateKey(6);
-          await storage.write(key: 'my_secret_key', value: secretKey);
-          log('บันทึกข้อมูลลงเซฟเรียบร้อย');
 
-          String? readResult = await storage.read(key: 'my_secret_key');
-          String newKey = readResult ?? ""; // ถ้าอ่านไม่ได้ ให้เป็นค่าว่าง
+          // 2. อ่าน Key จาก Storage
+          String? storedKey = await storage.read(key: 'my_secret_key');
+          String newKey = "";
+
+          // มีของเก่าใช้ของเก่า / ไม่มีให้สร้างใหม่
+          if (storedKey != null && storedKey.isNotEmpty) {
+            newKey = storedKey;
+            log('Found existing key: $newKey');
+          } else {
+            log('Creating new key...');
+            newKey = generateKey(6);
+            await storage.write(key: 'my_secret_key', value: newKey);
+            try {
+              await FirestoreService().updateUser(widget.studentId, {
+                'key': newKey,
+              });
+              log('Uploaded key to Firestore success');
+            } catch (e) {
+              log('Error uploading to Firestore: $e');
+            }
+          }
 
           if (newKey != null) {
             log('รหัสลับคือ: $newKey');
-          } else {
+          } else if (newKey.isEmpty) {
             log('ไม่พบรหัสลับ');
+            return;
           }
 
           log('newKey End :$newKey');
@@ -121,6 +137,11 @@ class _AdvertisePageState extends State<AdvertisePage> {
   // เริ่มส่งสัญญาณแบบ Burst Mode (เปิด-ปิด สลับกัน)
   Future<void> startBurstAdvertising(String key) async {
     log("**** StartBurstAdvertising ****");
+
+    if (key.isEmpty) {
+      log("Error: Key is empty! Cannot start advertising.");
+      return; // จบการทำงานทันทีถ้าไม่มี Key
+    }
 
     // ยกเลิก Timer ตัวเก่าก่อน (ป้องกันการทำงานซ้อน)
     _bleRefreshTimer?.cancel();
