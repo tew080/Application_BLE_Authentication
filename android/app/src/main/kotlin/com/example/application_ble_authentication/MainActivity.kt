@@ -1,4 +1,4 @@
-package com.example.application_ble_authentication
+package com.example.application_ble_authenticationTest
 
 //สำหรับอ้างอิงชื่อสิทธิ์ต่างๆที่ประกาศไว้ใน AndroidManifest.xml
 import android.Manifest

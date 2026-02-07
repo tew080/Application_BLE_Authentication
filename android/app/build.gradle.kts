@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.application_ble_authentication"
+    namespace = "com.example.application_ble_authenticationTest"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -23,7 +23,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.application_ble_authentication"
+        applicationId = "com.example.application_ble_authenticationTest"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
