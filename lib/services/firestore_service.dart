@@ -20,4 +20,9 @@ class FirestoreService {
     // snapshots() จะส่งข้อมูลมาเรื่อยๆ เมื่อ DB มีการเปลี่ยนแปลง
     return _db.collection('student').doc(studentId).snapshots();
   }
+
+  Future<void> updateUser(String studentId, Map<String, dynamic> data) async {
+    // ใช้ update เพื่อแก้ไขเฉพาะฟิลด์ที่ส่งไป (ข้อมูลอื่นจะไม่หาย)
+    await _db.collection('student').doc(studentId).update(data);
+  }
 }

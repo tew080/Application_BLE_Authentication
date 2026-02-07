@@ -84,20 +84,36 @@ class _AdvertisePageState extends State<AdvertisePage> {
           /*final String newKey =
               data['key']?.toString() ?? data['ble_key']?.toString() ?? "";*/
 
-          log('newKey Start');
-          final String secretKey = RandomKeyService.getHex(6);
-          await storage.write(key: 'my_secret_key', value: secretKey);
-          //storage.write(key: 'device_uuid', value: 'feaa-0000...');
-          log('บันทึกข้อมูลลงเซฟเรียบร้อย');
-          //String? newKey = storage.read(key: 'my_secret_key').toString();
+          // 2. อ่าน Key จาก Storage
+          String? storedKey = await storage.read(key: 'my_secret_key');
+          String newKey = "";
 
-          String? readResult = await storage.read(key: 'my_secret_key');
-          String newKey = readResult ?? ""; // ถ้าอ่านไม่ได้ ให้เป็นค่าว่าง
+          // มีของเก่าใช้ของเก่า / ไม่มีให้สร้างใหม่
+          if (storedKey != null && storedKey.isNotEmpty) {
+            newKey = storedKey;
+            log('Found existing key: $newKey');
+          } else {
+            log('Creating new key...');
+            newKey = RandomKeyService.getHex(12);
+            await storage.write(key: 'my_secret_key', value: newKey);
+            try {
+              await FirestoreService().updateUser(widget.studentId, {
+                'key': newKey,
+              });
+              log('Uploaded key to Firestore success');
+            } catch (e) {
+              log('Error uploading to Firestore: $e');
+            }
+          }
+
+          //String? readResult = await storage.read(key: 'my_secret_key');
+          //String newKey = readResult ?? ""; // ถ้าอ่านไม่ได้ ให้เป็นค่าว่าง
 
           if (newKey != null) {
             log('รหัสลับคือ: $newKey');
-          } else {
+          } else if (newKey.isEmpty) {
             log('ไม่พบรหัสลับ');
+            return;
           }
 
           log('newKey End :$newKey');
@@ -137,6 +153,11 @@ class _AdvertisePageState extends State<AdvertisePage> {
     _userSubscription?.cancel();
     log("Cancel Database");
 
+    // การลบ (Delete)
+    //await storage.delete(key: 'my_secret_key'); // ลบทีละตัว
+    // การลบทั้งหมด (Delete All)
+    await storage.deleteAll();
+
     // กลับไปหน้า Login และล้าง Stack เดิมทิ้ง (กด Back กลับมาไม่ได้)
     if (mounted) {
       Navigator.pushReplacement(
@@ -149,6 +170,11 @@ class _AdvertisePageState extends State<AdvertisePage> {
   // เริ่มส่งสัญญาณแบบ Burst Mode (เปิด-ปิด สลับกัน)
   Future<void> startBurstAdvertising(String key) async {
     log("**** StartBurstAdvertising ****");
+
+    if (key.isEmpty) {
+      log("Error: Key is empty! Cannot start advertising.");
+      return; // จบการทำงานทันทีถ้าไม่มี Key
+    }
 
     // ยกเลิก Timer ตัวเก่าก่อน (ป้องกันการทำงานซ้อน)
     _bleRefreshTimer?.cancel();
