@@ -26,12 +26,8 @@ class _LoginPageState extends State<LoginPage> {
 
   // รับค่าจาก รหัสนักศึกษาจาก TextField
   final studentIdCtrl = TextEditingController();
-  /*// รับค่าจาก รหัส TextField
-  final passwordCtrl = TextEditingController();*/
 
   void _checkLoginState() async {
-    // ค่าที่รับมาจาก studentIdCtrl และ passwordCtrl จะต้องไม่เป็นค่าว่าง
-    //if (studentIdCtrl.text.isEmpty || passwordCtrl.text.isEmpty) {
     if (studentIdCtrl.text.isEmpty) {
       setState(() {
         error = '*กรุณากรอกข้อมูลให้ครบถ้วน*';
@@ -48,11 +44,6 @@ class _LoginPageState extends State<LoginPage> {
 
     // ดึงค่าจากช่องกรอก และลบช่องว่าง (Whitespace) ออกทั้งหมด
     final String studentId = studentIdCtrl.text.replaceAll(RegExp(r'\s+'), '');
-    // ดึงค่ารหัสผ่าน และตัดช่องว่างหน้า-หลัง
-    /*final String password = passwordCtrl.text.trim();
-
-    // เรียก AuthService เพื่อตรวจสอบข้อมูล
-    final bool ok = await AuthenticationService.login(studentId, password);*/
 
     final bool ok = await AuthenticationService.login(studentId);
     if (ok == true) {
@@ -70,12 +61,8 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    /*  mounted T/F from class State
-     -  ถ้า (!mounted) แปลว่า "ถ้าหน้าจอนี้ไม่อยู่แล้ว"
-     - ให้จบการทำงานตรงนี้เลย ไม่ต้องทำบรรทัดล่างต่อ
-    */
     if (!mounted) {
-      log('Login Page ${mounted}');
+      log('Login Page $mounted');
       return;
     }
 
@@ -86,11 +73,10 @@ class _LoginPageState extends State<LoginPage> {
       - ให้แสดง '*ข้อมูลไม่ถูกต้อง*'
       - และให้เคลียร์ค่าใน TextField ทั้งหมด
       */
-      error = '*ข้อมูลไม่ถูกต้อง*';
+      error = '*ไม่มีข้อมูลหรือมีการใช้งานในอุปกรณ์อื่น*';
       studentIdCtrl.clear();
-      //passwordCtrl.clear();
     });
-    log('Loading Status ${loading}');
+    log('Loading Status $loading');
   }
 
   @override
@@ -102,7 +88,6 @@ class _LoginPageState extends State<LoginPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // TextField (), สร้างช่องรับค่าข้อมูล
             TextField(
               // ให้ TextField รับค่าจาก studentIdCtrl
               controller: studentIdCtrl,
@@ -110,14 +95,6 @@ class _LoginPageState extends State<LoginPage> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'รหัสนักศึกษา'),
             ),
-            /*const SizedBox(height: 12),
-            TextField(
-              // ให้ TextField รับค่าจาก passwordCtrl
-              controller: passwordCtrl,
-              // ซ้อนข้อความที่รับเข้ามา
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'รหัสผ่าน'),
-            ),*/
             const SizedBox(height: 20),
             // ถ้า ค่าในตัวแปล error ไม่เป็นค่าว่าง แสดงว่ามีข้อผิดพลาด จาก setState();
             if (error.isNotEmpty)
@@ -126,7 +103,7 @@ class _LoginPageState extends State<LoginPage> {
                 style: const TextStyle(
                   color: Colors.red,
                   // กำหนดขนาดของตัวอักษร
-                  fontSize: 16,
+                  fontSize: 15,
                   // กำหนดความหนาของตัวอักษร
                   fontWeight: FontWeight.bold,
                   // กำหนดระยะห่างระหว่างตัวอักษร
