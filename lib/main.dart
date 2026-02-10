@@ -8,6 +8,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../pages/bleadvertise_page.dart';
 
+import '../services/randomkey_service.dart';
+
+// นำเข้า FirestoreService
+import '../services/firestore_service.dart';
+
 /*
 - async เริ่มต้นการทำงานของ funtion ที่เรียกใช้ใน main
 - โดยที่ไม่ต้องรอให้เริ่มต้นการทำงานของ funtion ที่เรียกใช้ใน main ใช้เสร็จก่อน
@@ -17,12 +22,16 @@ void main() async {
   // ตรวจสอบให้แน่ใจว่า Widget Binding ถูกสร้างขึ้นแล้ว ก่อนที่จะเรียกใช้ Code ที่เป็น Async
   WidgetsFlutterBinding.ensureInitialized();
 
+  //เข้ารหัสข้อมูลที่บันทึกในเครื่อง encryptedSharedPreferences = true (เพื่อให้อ่านข้อมูลที่เข้ารหัสได้)
   const storage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
   // เริ่มต้นการทำงานของ Firebase (เชื่อมต่อกับโปรเจกต์)
   await Firebase.initializeApp();
+
+  String studentSecretKey = RandomKeyService.getHex(16);
+  await storage.write(key: 'student_secret_key', value: studentSecretKey);
 
   String? keyCheck = await storage.read(key: 'my_student_id');
   // รันแอปพลิเคชัน
