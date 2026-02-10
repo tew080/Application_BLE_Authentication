@@ -196,7 +196,7 @@ class MainActivity : FlutterActivity() {
         val data = AdvertiseData.Builder()
             .addServiceUuid(uuid)
             .addManufacturerData(companyId, stringToByteArray(blekey))
-            .setIncludeDeviceName(connectable)
+            .setIncludeDeviceName(devicename)
             .setIncludeTxPowerLevel(txpowerlevel)
             .build()
 
