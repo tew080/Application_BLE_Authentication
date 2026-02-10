@@ -46,6 +46,8 @@ dependencies:
 
   flutter_secure_storage: ^10.0.0
 
+  shared_preferences: ^2.5.4
+
 # Add icon app
 flutter_launcher_icons:
   android: "launcher_icon"
