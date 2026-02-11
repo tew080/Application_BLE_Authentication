@@ -3,7 +3,7 @@ import 'firestore_service.dart';
 // นำเข้า LogdebugService
 import '../services/logdebug_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+//import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthenticationService {
   //เข้ารหัสข้อมูลที่บันทึกในเครื่อง encryptedSharedPreferences = true (เพื่อให้อ่านข้อมูลที่เข้ารหัสได้)
@@ -17,7 +17,19 @@ class AuthenticationService {
     // สร้าง Instance ของ FirestoreService เพื่อใช้งาน
     final FirestoreService firestoreService = FirestoreService();
     String? studentSecretKey = await storage.read(key: 'student_secret_key');
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? firstRun = await storage.read(key: 'firstRun');
+
+    if (firstRun != 'isfirstRun') {
+      String firstRun = 'isfirstRun';
+      await FirestoreService().updateUser(studentId, {
+        'studentSecretKey': studentSecretKey,
+      });
+      log("First Run Set studentSecretKey = $studentSecretKey");
+      // บันทึกว่าเคยรันแล้ว
+      await storage.write(key: 'firstRun', value: firstRun);
+    }
+
+    /*SharedPreferences prefs = await SharedPreferences.getInstance();
 
     // เช็คว่าเคยรันหรือยัง (ถ้าไม่เคย จะได้ค่า false)
     bool isFirstRun = prefs.getBool('isFirstRun') ?? true;
@@ -29,7 +41,7 @@ class AuthenticationService {
       log("First Run Set studentSecretKey = $studentSecretKey");
       // บันทึกว่าเคยรันแล้ว
       await prefs.setBool('isFirstRun', false);
-    }
+    }*/
 
     // เรียกดึงข้อมูล User จาก Firestore ตาม studentId
     final doc = await firestoreService.getUser(studentId);
@@ -41,6 +53,8 @@ class AuthenticationService {
       log("studentSecretKey = $studentSecretKey");
       return false;
     } else {
+      await storage.write(key: 'student_secret_key', value: studentSecretKey);
+      log("studentSecretKey Save  = $studentSecretKey");
       // ถ้ามีข้อมูล ให้ บันทึกข้อมูลลง Storage และคืนค่า true (Login สำเร็จ)
       await storage.write(key: 'my_student_id', value: studentId);
       await FirestoreService().updateUser(studentId, {'loginStatus': 'true'});
