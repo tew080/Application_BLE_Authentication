@@ -36,6 +36,8 @@ class _AdvertisePageState extends State<AdvertisePage> {
   bool _isFirstLoad = true;
   // Timer สำหรับ Burst Mode
   Timer? _bleRefreshTimer;
+
+  String device = '';
   // เวลาเปิดสัญญาณ (5 วินาที)
   static const Duration _burstOn = Duration(seconds: 5);
   // เวลาพักสัญญาณ (4 วินาที)
@@ -170,8 +172,8 @@ class _AdvertisePageState extends State<AdvertisePage> {
 
     await FirestoreService().updateUser(widget.studentId, {
       'loginStatus': 'false',
+      'device': device,
     });
-
     // การลบ (Delete)
     await storage.delete(key: 'my_secret_key'); // ลบทีละตัว
     await storage.delete(key: 'my_student_id'); // ลบทีละตัว
