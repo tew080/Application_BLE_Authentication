@@ -24,32 +24,32 @@ class AuthenticationService {
     String? studentSecretKey = await storage.read(key: 'student_secret_key');
     String? firstRun = await storage.read(key: 'firstRun');
 
-    if (firstRun != 'isfirstRun') {
+    // เรียกดึงข้อมูล User จาก Firestore ตาม studentId
+    final doc = await firestoreService.getUser(studentId);
+
+    if (!doc.exists) {
+      return false;
+    }
+
+    if (firstRun != 'isfirstRun' && doc['loginStatus'] != 'true') {
       String firstRun = 'isfirstRun';
       await FirestoreService().updateUser(studentId, {
         'studentSecretKey': studentSecretKey,
+        'loginStatus': 'true',
+        'device': singleDeviceName,
       });
       log("First Run Set studentSecretKey = $studentSecretKey");
       // บันทึกว่าเคยรันแล้ว
       await storage.write(key: 'firstRun', value: firstRun);
+
+      await storage.write(key: 'student_secret_key', value: studentSecretKey);
+      log("studentSecretKey Save  = $studentSecretKey");
+      // ถ้ามีข้อมูล ให้ บันทึกข้อมูลลง Storage และคืนค่า true (Login สำเร็จ)
+      await storage.write(key: 'my_student_id', value: studentId);
+      log("LOGIN studentId='$studentId'");
+      log("IF 1");
+      return true;
     }
-
-    // เรียกดึงข้อมูล User จาก Firestore ตาม studentId
-    final doc = await firestoreService.getUser(studentId);
-
-    /*SharedPreferences prefs = await SharedPreferences.getInstance();
-
-    // เช็คว่าเคยรันหรือยัง (ถ้าไม่เคย จะได้ค่า false)
-    bool isFirstRun = prefs.getBool('isFirstRun') ?? true;
-    log("First Run Ststus ='$isFirstRun'");
-    if (isFirstRun) {
-      await FirestoreService().updateUser(studentId, {
-        'studentSecretKey': studentSecretKey,
-      });
-      log("First Run Set studentSecretKey = $studentSecretKey");
-      // บันทึกว่าเคยรันแล้ว
-      await prefs.setBool('isFirstRun', false);
-    }*/
 
     if (doc['device'] == singleDeviceName && doc['loginStatus'] == 'true') {
       await storage.write(key: 'student_secret_key', value: studentSecretKey);
@@ -57,19 +57,21 @@ class AuthenticationService {
       // ถ้ามีข้อมูล ให้ บันทึกข้อมูลลง Storage และคืนค่า true (Login สำเร็จ)
       await storage.write(key: 'my_student_id', value: studentId);
       await FirestoreService().updateUser(studentId, {
+        'studentSecretKey': studentSecretKey,
         'loginStatus': 'true',
         'device': singleDeviceName,
       });
       log("LOGIN studentId='$studentId'");
+      log("IF 2");
       return true;
     }
 
     // ตรวจสอบว่ามีเอกสาร (Document) นี้อยู่ในฐานข้อมูลหรือไม่
-    if (!doc.exists ||
-        doc['loginStatus'] == 'true' ||
+    if (doc['loginStatus'] == 'true' ||
         doc['studentSecretKey'] != studentSecretKey) {
       // ถ้าไม่มีข้อมูล ให้คืนค่า false (Login ไม่สำเร็จ)
       log("studentSecretKey = $studentSecretKey");
+      log("IF 3");
       return false;
     } else {
       await storage.write(key: 'student_secret_key', value: studentSecretKey);
@@ -81,6 +83,7 @@ class AuthenticationService {
         'device': singleDeviceName,
       });
       log("LOGIN studentId='$studentId'");
+      log("ESLE");
       return true;
     }
   }
