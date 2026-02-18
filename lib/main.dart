@@ -10,8 +10,8 @@ import '../pages/bleadvertise_page.dart';
 
 import '../services/randomkey_service.dart';
 
-// นำเข้า FirestoreService
-import '../services/firestore_service.dart';
+// นำเข้า LogdebugService
+import '../services/logdebug_service.dart';
 
 /*
 - async เริ่มต้นการทำงานของ funtion ที่เรียกใช้ใน main
@@ -27,11 +27,20 @@ void main() async {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
+  String? firstRun = await storage.read(key: 'firstRun');
+
   // เริ่มต้นการทำงานของ Firebase (เชื่อมต่อกับโปรเจกต์)
   await Firebase.initializeApp();
 
-  String studentSecretKey = RandomKeyService.getHex(16);
-  await storage.write(key: 'student_secret_key', value: studentSecretKey);
+  if (firstRun != 'isfirstRun') {
+    String randomstudentSecretKey = RandomKeyService.getHex(16);
+    await storage.write(
+      key: 'student_secret_key',
+      value: randomstudentSecretKey,
+    );
+    log("Random studentSecretKey = $randomstudentSecretKey");
+    log("FirstRun = $firstRun");
+  }
 
   String? keyCheck = await storage.read(key: 'my_student_id');
   // รันแอปพลิเคชัน
