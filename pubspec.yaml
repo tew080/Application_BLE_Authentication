@@ -50,6 +50,8 @@ dependencies:
 
   device_marketing_names: ^1.1.6
 
+  firebase_auth: ^6.1.4 # เพิ่มสำหรับ Phone Auth
+
 # Add icon app
 flutter_launcher_icons:
   android: "launcher_icon"
