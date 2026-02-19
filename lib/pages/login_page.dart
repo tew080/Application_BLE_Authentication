@@ -1,82 +1,162 @@
 import 'package:flutter/material.dart';
-
-// นำเข้า AuthenticationService
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/authentication_service.dart';
-
-// นำเข้า LogdebugService
 import '../services/logdebug_service.dart';
-
-// นำเข้าหน้า BleAdvertisePage
+import '../services/firestore_service.dart'; // 新增
 import 'bleadvertise_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
   @override
-  State<LoginPage> createState() {
-    return _LoginPageState();
-  }
+  State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // กำหนดค่าเริ่มต้นให้กับตัวแปร error เป็น ค่าว่าง
+  final _studentIdCtrl = TextEditingController();
+  final _smsCodeCtrl = TextEditingController();
+
   String error = '';
-  // กำหนดค่าเริ่มต้นให้กับตัวแปร loading เป็น false
   bool loading = false;
+  bool _isOtpSent = false; // สถานะแสดงฟิลด์ OTP
+  String _verificationId = ''; // เก็บ verificationId จาก Firebase
+  String _currentPhone = ''; // เบอร์ที่ดึงจาก Firestore
 
-  // รับค่าจาก รหัสนักศึกษาจาก TextField
-  final studentIdCtrl = TextEditingController();
-
-  void _checkLoginState() async {
-    if (studentIdCtrl.text.isEmpty) {
-      setState(() {
-        error = '*กรุณากรอกข้อมูลให้ครบถ้วน*';
-      });
-      return; // จบการทำงานทันทีถ้าข้อมูลว่าง
+  // ตรวจสอบ studentId และดึงเบอร์โทรศัพท์จาก Firestore
+  Future<void> _sendOtp() async {
+    final studentId = _studentIdCtrl.text.trim();
+    if (studentId.isEmpty) {
+      setState(() => error = '*กรุณากรอกรหัสนักศึกษา*');
+      return;
     }
 
     setState(() {
-      // ให้เซ็ตตัวแปร loading = true เพื่อป้องกันการกดปุ่ม Login ซ้ำ
       loading = true;
-      // ให้เซ็ตตัวแปร error = '' เพื่อเคลียร์ข้อความ error ที่แสดง
       error = '';
     });
 
-    // ดึงค่าจากช่องกรอก และลบช่องว่าง (Whitespace) ออกทั้งหมด
-    final String studentId = studentIdCtrl.text.replaceAll(RegExp(r'\s+'), '');
+    try {
+      // ดึงข้อมูล student จาก Firestore
+      final doc = await FirestoreService().getUser(studentId);
+      if (!doc.exists) {
+        setState(() {
+          error = '*ไม่พบรหัสนักศึกษาในระบบ*';
+          loading = false;
+        });
+        return;
+      }
 
-    final bool ok = await AuthenticationService.login(studentId);
-    if (ok == true) {
-      log("Login Successfully Status = ${ok}");
-      // เปลี่ยนหน้าไปที่ AdvertisePage และปิดหน้า Login ทิ้ง (Back ไม่ได้)
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) {
-            return AdvertisePage(studentId: studentId);
-          },
-        ),
+      final phone = doc['phone'] as String?;
+      if (phone == null || phone.isEmpty) {
+        setState(() {
+          error = '*ไม่พบเบอร์โทรศัพท์ที่ลงทะเบียนไว้*';
+          loading = false;
+        });
+        return;
+      }
+
+      _currentPhone = phone;
+
+      // เริ่มส่ง OTP
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: phone,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          // กรณีกรอกอัตโนมัติ (rare) ให้ยืนยันทันที
+          await _signInWithCredential(credential, studentId);
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          setState(() {
+            error = 'ส่ง OTP ไม่สำเร็จ: ${e.message}';
+            loading = false;
+          });
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          setState(() {
+            _verificationId = verificationId;
+            _isOtpSent = true;
+            loading = false;
+          });
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          _verificationId = verificationId;
+        },
       );
-      // จบการทำงาน
-      return;
+    } catch (e) {
+      setState(() {
+        error = 'เกิดข้อผิดพลาด: $e';
+        loading = false;
+      });
     }
+  }
 
-    if (!mounted) {
-      log('Login Page $mounted');
+  // ยืนยัน OTP และเข้าสู่ระบบ
+  Future<void> _verifyOtp() async {
+    final smsCode = _smsCodeCtrl.text.trim();
+    if (smsCode.isEmpty || _verificationId.isEmpty) {
+      setState(() => error = '*กรอกรหัส OTP*');
       return;
     }
 
     setState(() {
-      // ให้เซ็ตตัวแปร loading = false เพื่อที่อนุญาตให้กดปุ่ม Login อีกครั้ง
-      loading = false;
-      /*
-      - ให้แสดง '*ข้อมูลไม่ถูกต้อง*'
-      - และให้เคลียร์ค่าใน TextField ทั้งหมด
-      */
-      error = '*ไม่มีข้อมูลหรือมีการใช้งานในอุปกรณ์อื่น*';
-      studentIdCtrl.clear();
+      loading = true;
+      error = '';
     });
-    log('Loading Status $loading');
+
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId,
+        smsCode: smsCode,
+      );
+      await _signInWithCredential(credential, _studentIdCtrl.text.trim());
+    } catch (e) {
+      setState(() {
+        error = 'รหัส OTP ไม่ถูกต้อง';
+        loading = false;
+      });
+    }
+  }
+
+  // หลังจากยืนยัน OTP สำเร็จ เรียก AuthenticationService.login
+  Future<void> _signInWithCredential(
+    PhoneAuthCredential credential,
+    String studentId,
+  ) async {
+    try {
+      // ถ้ายังไม่ได้ sign-in ด้วย Firebase Auth (optional)
+      await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // เรียก login เดิม (ตรวจสอบ device, loginStatus, studentSecretKey)
+      final bool ok = await AuthenticationService.login(studentId);
+      if (!ok) {
+        setState(() {
+          error = '*ไม่สามารถเข้าสู่ระบบ โปรดลองอีกครั้ง*';
+          loading = false;
+        });
+        return;
+      }
+
+      // ไปหน้า Advertise
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => AdvertisePage(studentId: studentId)),
+      );
+    } catch (e) {
+      setState(() {
+        error = 'ยืนยัน OTP ไม่สำเร็จ: $e';
+        loading = false;
+      });
+    }
+  }
+
+  // กลับไปแก้ไข studentId
+  void _resetOtpStep() {
+    setState(() {
+      _isOtpSent = false;
+      _verificationId = '';
+      _smsCodeCtrl.clear();
+      error = '';
+    });
   }
 
   @override
@@ -88,61 +168,79 @@ class _LoginPageState extends State<LoginPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // ช่องกรอกรหัสนักศึกษา (disable ขณะกำลังส่ง OTP หรือกำลังยืนยัน)
             TextField(
-              // ให้ TextField รับค่าจาก studentIdCtrl
-              controller: studentIdCtrl,
-              // รับค่าเป็นตัวเลขเท่านั้น
+              controller: _studentIdCtrl,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'รหัสนักศึกษา'),
+              enabled: !_isOtpSent && !loading,
             ),
             const SizedBox(height: 20),
-            // ถ้า ค่าในตัวแปล error ไม่เป็นค่าว่าง แสดงว่ามีข้อผิดพลาด จาก setState();
-            if (error.isNotEmpty)
+
+            // ถ้าส่ง OTP แล้ว จะแสดงช่องกรอกรหัส OTP และเบอร์ที่ส่งไป
+            if (_isOtpSent) ...[
               Text(
-                error,
-                style: const TextStyle(
-                  color: Colors.red,
-                  // กำหนดขนาดของตัวอักษร
-                  fontSize: 15,
-                  // กำหนดความหนาของตัวอักษร
-                  fontWeight: FontWeight.bold,
-                  // กำหนดระยะห่างระหว่างตัวอักษร
-                  letterSpacing: 1,
+                'ส่งรหัส OTP ไปยัง $_currentPhone',
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _smsCodeCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'รหัส OTP 6 หลัก'),
+                enabled: !loading,
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: loading ? null : _resetOtpStep,
+                child: const Text('เปลี่ยนรหัสนักศึกษา'),
+              ),
+            ],
+
+            // แสดง error
+            if (error.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  error,
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
+
+            const SizedBox(height: 20),
+
+            // ปุ่มหลัก: เปลี่ยนข้อความตามสถานะ
             ElevatedButton(
-              /*
-              - ถ้าตัวแปร loading เป็น true ให้ปุ่มไม่สามารถกดได้
-              - แต่ถ้าตัวแปร loading เป็น false ให้ปุ่มสามารถกดได้
-              */
-              onPressed: loading ? null : _checkLoginState,
-              // กำหนดสไตล์ของปุ่ม
+              onPressed: loading ? null : (_isOtpSent ? _verifyOtp : _sendOtp),
               style: ElevatedButton.styleFrom(
-                // สีพื้นหลังของปุ่ม
                 backgroundColor: Colors.blue,
-                // สีเบื้องหน้าของปุ่ม
                 foregroundColor: Colors.white,
-                // กำหนดขนาดของปุ่ม
-                minimumSize: Size(200, 50),
+                minimumSize: const Size(200, 50),
                 shape: RoundedRectangleBorder(
-                  // กำหนดขอบของปุ่ม
-                  //side: BorderSide(color: Colors.indigoAccent, width: 2),
-                  // กำหนดความโค้งของขอบปุ่ม
-                  borderRadius: BorderRadius.circular(30.0),
+                  borderRadius: BorderRadius.circular(30),
                 ),
               ),
-              child: const Text(
-                'ลงชื่อเข้าใช้',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  letterSpacing: 1,
-                ), // End TextStyle
-              ), // End Text
-            ), // End ElevatedButton
-          ], // End Row
-        ), // End Column
-      ), // End Container
-    ); // End Scaffold
-  } // End Widget build
-} // End Class LoginPage
+              child: Text(
+                loading
+                    ? 'กำลังดำเนินการ...'
+                    : (_isOtpSent ? 'ยืนยัน OTP' : 'ขอรหัส OTP'),
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _studentIdCtrl.dispose();
+    _smsCodeCtrl.dispose();
+    super.dispose();
+  }
+}

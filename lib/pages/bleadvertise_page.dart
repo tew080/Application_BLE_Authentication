@@ -15,6 +15,8 @@ import '../services/randomkey_service.dart';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
 class AdvertisePage extends StatefulWidget {
   // รับรหัสนักศึกษาเข้ามา
   final String studentId;
@@ -179,6 +181,9 @@ class _AdvertisePageState extends State<AdvertisePage> {
     await storage.delete(key: 'my_student_id'); // ลบทีละตัว
     // การลบทั้งหมด (Delete All)
     //await storage.deleteAll();
+
+    // *** เพิ่ม signOut จาก Firebase Auth ***
+    await FirebaseAuth.instance.signOut();
 
     // กลับไปหน้า Login และล้าง Stack เดิมทิ้ง (กด Back กลับมาไม่ได้)
     if (mounted) {
