@@ -1,3 +1,4 @@
+import 'dart:async'; // 🟢 เพิ่ม import สำหรับใช้งาน Timer
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -20,9 +21,7 @@ class _LoginPageState extends State<LoginPage> {
   final _studentIdCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
 
-  // 🟢 แก้ไข 1: เปลี่ยนมาใช้ GoogleSignIn.instance แทน
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
-  // เพิ่มตัวแปรเช็คว่า Initialize แล้วหรือยัง
   bool _isGoogleSignInInitialized = false;
 
   String error = '';
@@ -30,11 +29,93 @@ class _LoginPageState extends State<LoginPage> {
   bool _isOtpSent = false;
   String _targetEmail = '';
 
+  // 🟢 ตัวแปรสำหรับจัดการเวลาหน่วง 30 วินาที
+  Timer? _resendTimer;
+  int _resendCountdown = 0;
+
   final String systemEmail = 'thammarat.tew@gmail.com';
   final String systemAppPassword = 'bbdg gzjl hqfg oczk';
 
   // --------------------------------------------------------
-  // 1. ฟังก์ชันเลือกอีเมลจากเครื่อง และส่ง OTP
+  // ฟังก์ชันเริ่มนับเวลาถอยหลัง 30 วินาที
+  // --------------------------------------------------------
+  void _startResendTimer() {
+    setState(() => _resendCountdown = 30);
+    _resendTimer?.cancel();
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_resendCountdown > 0) {
+        setState(() => _resendCountdown--);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  // --------------------------------------------------------
+  // ฟังก์ชันขอรหัส OTP ใหม่ (ส่งไปอีเมลเดิม)
+  // --------------------------------------------------------
+  Future<void> _resendOtp() async {
+    if (_resendCountdown > 0)
+      return; // ป้องกันการกดซ้ำถ้าระบบยังนับเวลาไม่เสร็จ
+
+    final studentId = _studentIdCtrl.text.trim();
+    setState(() {
+      loading = true;
+      error = '';
+    });
+
+    try {
+      // สร้างรหัส OTP สุ่ม 6 หลัก
+      String otp = (Random().nextInt(900000) + 100000).toString();
+      int expiryTime = DateTime.now()
+          .add(const Duration(minutes: 1))
+          .millisecondsSinceEpoch;
+
+      // บันทึก OTP และเวลาหมดอายุลง Firestore
+      await FirestoreService().updateUser(studentId, {
+        'current_otp': otp,
+        'otp_expiry': expiryTime,
+      });
+
+      // สั่งส่งอีเมลแจ้ง OTP
+      final smtpServer = gmail(systemEmail, systemAppPassword);
+      final message = Message()
+        ..from = Address(systemEmail, 'ระบบเข้าสู่ระบบ BLE')
+        ..recipients.add(_targetEmail)
+        ..subject = 'รหัส OTP ใหม่ของคุณคือ: $otp'
+        ..html =
+            """
+          <div style="font-family: sans-serif; padding: 20px;">
+            <h2>รหัสยืนยันตัวตน (OTP) ใหม่</h2>
+            <p>รหัสสำหรับเข้าสู่ระบบของคุณคือ:</p>
+            <h1 style="color: #2196F3; font-size: 32px; letter-spacing: 5px;">$otp</h1>
+            <p style="color: #888;">กรุณานำรหัสนี้ไปกรอกในแอปพลิเคชัน</p>
+            <p style="color: red; font-weight: bold;">*รหัสนี้มีอายุการใช้งาน 1 นาที*</p>
+          </div>
+        """;
+
+      await send(message, smtpServer);
+
+      setState(() {
+        loading = false;
+        error = ''; // เคลียร์ข้อความ Error ทิ้งเมื่อส่งใหม่สำเร็จ
+      });
+
+      log("ส่ง OTP ใหม่: $otp ไปที่ $_targetEmail สำเร็จแล้ว");
+
+      // เริ่มนับเวลาถอยหลัง 30 วินาทีใหม่
+      _startResendTimer();
+    } catch (e) {
+      log("Error resend OTP: $e");
+      setState(() {
+        error = 'เกิดข้อผิดพลาดในการส่ง OTP ใหม่: $e';
+        loading = false;
+      });
+    }
+  }
+
+  // --------------------------------------------------------
+  // 1. ฟังก์ชันเลือกอีเมลจากเครื่อง และส่ง OTP ครั้งแรก
   // --------------------------------------------------------
   Future<void> _pickEmailAndSendOtp() async {
     final studentId = _studentIdCtrl.text.trim();
@@ -58,18 +139,15 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      // 🟢 แก้ไข 2: ต้องสั่ง Initialize 1 ครั้งก่อนดึงหน้าต่างอีเมล (กฎใหม่ของ v7+)
       if (!_isGoogleSignInInitialized) {
         await _googleSignIn.initialize();
         _isGoogleSignInInitialized = true;
       }
 
-      // 🟢 แก้ไข 3: เปลี่ยนจาก signIn() เป็น authenticate() และใช้ try-catch ดักเมื่อผู้ใช้กดยกเลิก
       GoogleSignInAccount? account;
       try {
         account = await _googleSignIn.authenticate(scopeHint: ['email']);
       } catch (e) {
-        // ผู้ใช้กดยกเลิกหน้าต่างเลือกอีเมล
         setState(() => loading = false);
         return;
       }
@@ -82,27 +160,19 @@ class _LoginPageState extends State<LoginPage> {
       final String selectedEmail = account.email;
       log("ผู้ใช้เลือกอีเมล: $selectedEmail");
 
-      // ผูกอีเมลที่เลือกเข้ากับรหัสนักศึกษาใน Firestore
       await FirestoreService().updateUser(studentId, {'email': selectedEmail});
-
-      // สั่ง SignOut เพื่อให้รอบหน้ากดเลือกบัญชีใหม่ได้
       await _googleSignIn.signOut();
 
-      // สร้างรหัส OTP สุ่ม 6 หลัก
       String otp = (Random().nextInt(900000) + 100000).toString();
-
-      // 🟢 เพิ่มส่วนนี้: กำหนดเวลาหมดอายุ (เช่น 5 นาทีจากเวลาปัจจุบัน)
       int expiryTime = DateTime.now()
           .add(const Duration(minutes: 1))
           .millisecondsSinceEpoch;
 
-      // 🟢 แก้ไขส่วนนี้: บันทึก OTP และ otp_expiry ลง Firestore
       await FirestoreService().updateUser(studentId, {
         'current_otp': otp,
         'otp_expiry': expiryTime,
       });
 
-      // สั่งส่งอีเมลแจ้ง OTP
       final smtpServer = gmail(systemEmail, systemAppPassword);
       final message = Message()
         ..from = Address(systemEmail, 'ระบบเข้าสู่ระบบ BLE')
@@ -110,14 +180,14 @@ class _LoginPageState extends State<LoginPage> {
         ..subject = 'รหัส OTP ของคุณคือ: $otp'
         ..html =
             """
-                <div style="font-family: sans-serif; padding: 20px;">
-                  <h2>รหัสยืนยันตัวตน (OTP)</h2>
-                  <p>รหัสสำหรับเข้าสู่ระบบของคุณคือ:</p>
-                  <h1 style="color: #2196F3; font-size: 32px; letter-spacing: 5px;">$otp</h1>
-                  <p style="color: #888;">กรุณานำรหัสนี้ไปกรอกในแอปพลิเคชัน</p>
-                  <p style="color: red; font-weight: bold;">*รหัสนี้มีอายุการใช้งาน 1 นาที*</p>
-                </div>
-              """;
+          <div style="font-family: sans-serif; padding: 20px;">
+            <h2>รหัสยืนยันตัวตน (OTP)</h2>
+            <p>รหัสสำหรับเข้าสู่ระบบของคุณคือ:</p>
+            <h1 style="color: #2196F3; font-size: 32px; letter-spacing: 5px;">$otp</h1>
+            <p style="color: #888;">กรุณานำรหัสนี้ไปกรอกในแอปพลิเคชัน</p>
+            <p style="color: red; font-weight: bold;">*รหัสนี้มีอายุการใช้งาน 1 นาที*</p>
+          </div>
+        """;
 
       await send(message, smtpServer);
 
@@ -126,14 +196,17 @@ class _LoginPageState extends State<LoginPage> {
         _targetEmail = selectedEmail;
         loading = false;
       });
+
       log("ส่ง OTP: $otp ไปที่ $_targetEmail สำเร็จแล้ว");
+
+      // 🟢 เริ่มนับเวลา 30 วิ ทันทีที่ส่งสำเร็จ
+      _startResendTimer();
     } catch (e) {
       log("Error pick email or send OTP: $e");
       setState(() {
         error = 'เกิดข้อผิดพลาด: $e';
         loading = false;
       });
-      // ป้องกันการค้างของ Session เผื่อเกิด Error
       try {
         await _googleSignIn.signOut();
       } catch (_) {}
@@ -161,24 +234,21 @@ class _LoginPageState extends State<LoginPage> {
       final doc = await FirestoreService().getUser(studentId);
       final data = doc.data() as Map<String, dynamic>?;
 
-      // ดึงข้อมูล OTP และ เวลาหมดอายุ
       final savedOtp = data != null && data.containsKey('current_otp')
           ? data['current_otp'].toString()
           : '';
 
-      // 🟢 ดึงเวลาหมดอายุออกมา (ถ้าไม่มีให้เป็น 0)
       final expiryTime = data != null && data.containsKey('otp_expiry')
           ? data['otp_expiry'] as int
           : 0;
 
       if (inputOtp == savedOtp && savedOtp.isNotEmpty) {
-        // 🟢 เพิ่มส่วนนี้: ตรวจสอบเวลาหมดอายุ
         if (DateTime.now().millisecondsSinceEpoch > expiryTime) {
           setState(() {
-            error = 'รหัส OTP หมดอายุแล้ว กรุณาขอรหัสใหม่อีกครั้ง';
+            // 🟢 แจ้งเตือนหมดอายุ แต่ไม่เปลี่ยนหน้า เพื่อให้กดปุ่มส่งใหม่ได้
+            error = 'รหัส OTP หมดอายุแล้ว กรุณากดขอรหัสใหม่อีกครั้ง';
             loading = false;
           });
-          // เคลียร์ OTP ที่หมดอายุทิ้งเพื่อความปลอดภัย
           await FirestoreService().updateUser(studentId, {
             'current_otp': '',
             'otp_expiry': 0,
@@ -186,7 +256,6 @@ class _LoginPageState extends State<LoginPage> {
           return;
         }
 
-        // 🟢 แก้ไขส่วนนี้: เคลียร์ทั้ง OTP และเวลาทิ้งเมื่อใช้สำเร็จแล้ว
         await FirestoreService().updateUser(studentId, {
           'current_otp': '',
           'otp_expiry': 0,
@@ -224,7 +293,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // --------------------------------------------------------
-  // ส่วนแสดงผล UI (ยังคงเหมือนเดิมทั้งหมด)
+  // ส่วนแสดงผล UI
   // --------------------------------------------------------
   @override
   Widget build(BuildContext context) {
@@ -287,12 +356,29 @@ class _LoginPageState extends State<LoginPage> {
                   prefixIcon: Icon(Icons.password),
                 ),
               ),
+
+              // 🟢 ปุ่มขอ OTP ใหม่ พร้อมระบบนับเวลาถอยหลัง
+              TextButton.icon(
+                onPressed: _resendCountdown > 0 ? null : _resendOtp,
+                icon: const Icon(Icons.refresh),
+                label: Text(
+                  _resendCountdown > 0
+                      ? 'ขอรหัส OTP ใหม่ (รอ $_resendCountdown วินาที)'
+                      : 'ขอรหัส OTP ใหม่',
+                  style: TextStyle(
+                    color: _resendCountdown > 0 ? Colors.grey : Colors.blue,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
               TextButton(
                 onPressed: () {
                   setState(() {
                     _isOtpSent = false;
                     _otpCtrl.clear();
                     error = '';
+                    _resendTimer?.cancel(); // เคลียร์เวลาถอยหลังถ้ายกเลิก
                   });
                 },
                 child: const Text(
@@ -351,8 +437,10 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  // 🟢 อย่าลืม Cancel Timer เมื่อปิดหน้า เพื่อป้องกัน Memory Leak
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _studentIdCtrl.dispose();
     _otpCtrl.dispose();
     super.dispose();
