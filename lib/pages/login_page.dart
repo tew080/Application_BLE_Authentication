@@ -91,8 +91,16 @@ class _LoginPageState extends State<LoginPage> {
       // สร้างรหัส OTP สุ่ม 6 หลัก
       String otp = (Random().nextInt(900000) + 100000).toString();
 
-      // บันทึก OTP ลง Firestore
-      await FirestoreService().updateUser(studentId, {'current_otp': otp});
+      // 🟢 เพิ่มส่วนนี้: กำหนดเวลาหมดอายุ (เช่น 5 นาทีจากเวลาปัจจุบัน)
+      int expiryTime = DateTime.now()
+          .add(const Duration(minutes: 1))
+          .millisecondsSinceEpoch;
+
+      // 🟢 แก้ไขส่วนนี้: บันทึก OTP และ otp_expiry ลง Firestore
+      await FirestoreService().updateUser(studentId, {
+        'current_otp': otp,
+        'otp_expiry': expiryTime,
+      });
 
       // สั่งส่งอีเมลแจ้ง OTP
       final smtpServer = gmail(systemEmail, systemAppPassword);
@@ -102,13 +110,14 @@ class _LoginPageState extends State<LoginPage> {
         ..subject = 'รหัส OTP ของคุณคือ: $otp'
         ..html =
             """
-          <div style="font-family: sans-serif; padding: 20px;">
-            <h2>รหัสยืนยันตัวตน (OTP)</h2>
-            <p>รหัสสำหรับเข้าสู่ระบบของคุณคือ:</p>
-            <h1 style="color: #2196F3; font-size: 32px; letter-spacing: 5px;">$otp</h1>
-            <p style="color: #888;">กรุณานำรหัสนี้ไปกรอกในแอปพลิเคชัน</p>
-          </div>
-        """;
+                <div style="font-family: sans-serif; padding: 20px;">
+                  <h2>รหัสยืนยันตัวตน (OTP)</h2>
+                  <p>รหัสสำหรับเข้าสู่ระบบของคุณคือ:</p>
+                  <h1 style="color: #2196F3; font-size: 32px; letter-spacing: 5px;">$otp</h1>
+                  <p style="color: #888;">กรุณานำรหัสนี้ไปกรอกในแอปพลิเคชัน</p>
+                  <p style="color: red; font-weight: bold;">*รหัสนี้มีอายุการใช้งาน 1 นาที*</p>
+                </div>
+              """;
 
       await send(message, smtpServer);
 
@@ -151,12 +160,37 @@ class _LoginPageState extends State<LoginPage> {
     try {
       final doc = await FirestoreService().getUser(studentId);
       final data = doc.data() as Map<String, dynamic>?;
+
+      // ดึงข้อมูล OTP และ เวลาหมดอายุ
       final savedOtp = data != null && data.containsKey('current_otp')
           ? data['current_otp'].toString()
           : '';
 
+      // 🟢 ดึงเวลาหมดอายุออกมา (ถ้าไม่มีให้เป็น 0)
+      final expiryTime = data != null && data.containsKey('otp_expiry')
+          ? data['otp_expiry'] as int
+          : 0;
+
       if (inputOtp == savedOtp && savedOtp.isNotEmpty) {
-        await FirestoreService().updateUser(studentId, {'current_otp': ''});
+        // 🟢 เพิ่มส่วนนี้: ตรวจสอบเวลาหมดอายุ
+        if (DateTime.now().millisecondsSinceEpoch > expiryTime) {
+          setState(() {
+            error = 'รหัส OTP หมดอายุแล้ว กรุณาขอรหัสใหม่อีกครั้ง';
+            loading = false;
+          });
+          // เคลียร์ OTP ที่หมดอายุทิ้งเพื่อความปลอดภัย
+          await FirestoreService().updateUser(studentId, {
+            'current_otp': '',
+            'otp_expiry': 0,
+          });
+          return;
+        }
+
+        // 🟢 แก้ไขส่วนนี้: เคลียร์ทั้ง OTP และเวลาทิ้งเมื่อใช้สำเร็จแล้ว
+        await FirestoreService().updateUser(studentId, {
+          'current_otp': '',
+          'otp_expiry': 0,
+        });
 
         bool isSuccess = await AuthenticationService.login(studentId);
 
