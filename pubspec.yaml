@@ -50,6 +50,16 @@ dependencies:
 
   device_marketing_names: ^1.1.6
 
+  google_sign_in: ^7.2.0
+  #firebase_auth: ^6.1.4
+  #app_links: ^7.0.0
+
+  #device_info_plus: ^12.3.0
+
+  mailer: ^6.6.0
+
+  #android_id: ^0.5.1
+
 # Add icon app
 flutter_launcher_icons:
   android: "launcher_icon"
