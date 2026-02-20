@@ -1,4 +1,4 @@
-import 'dart:async'; // 🟢 เพิ่ม import สำหรับใช้งาน Timer
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -26,10 +26,11 @@ class _LoginPageState extends State<LoginPage> {
 
   String error = '';
   bool loading = false;
+
   bool _isOtpSent = false;
+  bool _isChangingEmail = false;
   String _targetEmail = '';
 
-  // 🟢 ตัวแปรสำหรับจัดการเวลาหน่วง 30 วินาที
   Timer? _resendTimer;
   int _resendCountdown = 0;
 
@@ -52,11 +53,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // --------------------------------------------------------
-  // ฟังก์ชันขอรหัส OTP ใหม่ (ส่งไปอีเมลเดิม)
+  // ฟังก์ชันขอรหัส OTP ใหม่
   // --------------------------------------------------------
   Future<void> _resendOtp() async {
-    if (_resendCountdown > 0)
-      return; // ป้องกันการกดซ้ำถ้าระบบยังนับเวลาไม่เสร็จ
+    if (_resendCountdown > 0) return;
 
     final studentId = _studentIdCtrl.text.trim();
     setState(() {
@@ -65,29 +65,30 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      // สร้างรหัส OTP สุ่ม 6 หลัก
       String otp = (Random().nextInt(900000) + 100000).toString();
       int expiryTime = DateTime.now()
           .add(const Duration(minutes: 1))
           .millisecondsSinceEpoch;
 
-      // บันทึก OTP และเวลาหมดอายุลง Firestore
       await FirestoreService().updateUser(studentId, {
         'current_otp': otp,
         'otp_expiry': expiryTime,
       });
 
-      // สั่งส่งอีเมลแจ้ง OTP
+      String subject = _isChangingEmail
+          ? 'รหัส OTP ใหม่ สำหรับเปลี่ยนอีเมล: $otp'
+          : 'รหัส OTP ใหม่ของคุณคือ: $otp';
+
       final smtpServer = gmail(systemEmail, systemAppPassword);
       final message = Message()
         ..from = Address(systemEmail, 'ระบบเข้าสู่ระบบ BLE')
         ..recipients.add(_targetEmail)
-        ..subject = 'รหัส OTP ใหม่ของคุณคือ: $otp'
+        ..subject = subject
         ..html =
             """
           <div style="font-family: sans-serif; padding: 20px;">
             <h2>รหัสยืนยันตัวตน (OTP) ใหม่</h2>
-            <p>รหัสสำหรับเข้าสู่ระบบของคุณคือ:</p>
+            <p>รหัสสำหรับยืนยันการทำรายการของคุณคือ:</p>
             <h1 style="color: #2196F3; font-size: 32px; letter-spacing: 5px;">$otp</h1>
             <p style="color: #888;">กรุณานำรหัสนี้ไปกรอกในแอปพลิเคชัน</p>
             <p style="color: red; font-weight: bold;">*รหัสนี้มีอายุการใช้งาน 1 นาที*</p>
@@ -98,12 +99,10 @@ class _LoginPageState extends State<LoginPage> {
 
       setState(() {
         loading = false;
-        error = ''; // เคลียร์ข้อความ Error ทิ้งเมื่อส่งใหม่สำเร็จ
+        error = '';
       });
 
       log("ส่ง OTP ใหม่: $otp ไปที่ $_targetEmail สำเร็จแล้ว");
-
-      // เริ่มนับเวลาถอยหลัง 30 วินาทีใหม่
       _startResendTimer();
     } catch (e) {
       log("Error resend OTP: $e");
@@ -115,7 +114,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // --------------------------------------------------------
-  // 1. ฟังก์ชันเลือกอีเมลจากเครื่อง และส่ง OTP ครั้งแรก
+  // 1. ฟังก์ชันเลือกอีเมลจากเครื่อง และส่ง OTP (Login ปกติ)
   // --------------------------------------------------------
   Future<void> _pickEmailAndSendOtp() async {
     final studentId = _studentIdCtrl.text.trim();
@@ -139,6 +138,11 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
+      final data = doc.data() as Map<String, dynamic>?;
+      final registeredEmail = data != null && data.containsKey('email')
+          ? data['email'].toString().trim()
+          : '';
+
       if (!_isGoogleSignInInitialized) {
         await _googleSignIn.initialize();
         _isGoogleSignInInitialized = true;
@@ -157,10 +161,24 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      final String selectedEmail = account.email;
-      log("ผู้ใช้เลือกอีเมล: $selectedEmail");
+      final String selectedEmail = account.email.trim();
 
-      await FirestoreService().updateUser(studentId, {'email': selectedEmail});
+      if (registeredEmail.isNotEmpty && registeredEmail != selectedEmail) {
+        setState(() {
+          error =
+              'รหัสนักศึกษานี้ผูกกับอีเมล:\n$registeredEmail\nหากต้องการเปลี่ยน ให้กดปุ่ม "ต้องการเปลี่ยนอีเมลที่ผูกไว้" ด้านล่าง';
+          loading = false;
+        });
+        await _googleSignIn.signOut();
+        return;
+      }
+
+      if (registeredEmail.isEmpty) {
+        await FirestoreService().updateUser(studentId, {
+          'email': selectedEmail,
+        });
+      }
+
       await _googleSignIn.signOut();
 
       String otp = (Random().nextInt(900000) + 100000).toString();
@@ -193,16 +211,13 @@ class _LoginPageState extends State<LoginPage> {
 
       setState(() {
         _isOtpSent = true;
+        _isChangingEmail = false;
         _targetEmail = selectedEmail;
         loading = false;
       });
 
-      log("ส่ง OTP: $otp ไปที่ $_targetEmail สำเร็จแล้ว");
-
-      // 🟢 เริ่มนับเวลา 30 วิ ทันทีที่ส่งสำเร็จ
       _startResendTimer();
     } catch (e) {
-      log("Error pick email or send OTP: $e");
       setState(() {
         error = 'เกิดข้อผิดพลาด: $e';
         loading = false;
@@ -214,7 +229,91 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // --------------------------------------------------------
-  // 2. ฟังก์ชันตรวจสอบรหัส OTP ที่ผู้ใช้กรอก
+  // 2. ฟังก์ชันร้องขอเปลี่ยนอีเมล (ส่ง OTP ไปยังอีเมลเดิม)
+  // --------------------------------------------------------
+  Future<void> _requestEmailChange() async {
+    final studentId = _studentIdCtrl.text.trim();
+    if (studentId.isEmpty) {
+      setState(() => error = '*กรุณากรอกรหัสนักศึกษา*');
+      return;
+    }
+
+    setState(() {
+      loading = true;
+      error = '';
+    });
+
+    try {
+      final doc = await FirestoreService().getUser(studentId);
+      if (!doc.exists) {
+        setState(() {
+          error = 'ไม่พบรหัสนักศึกษานี้ในระบบ';
+          loading = false;
+        });
+        return;
+      }
+
+      final data = doc.data() as Map<String, dynamic>?;
+      final registeredEmail = data != null && data.containsKey('email')
+          ? data['email'].toString().trim()
+          : '';
+
+      if (registeredEmail.isEmpty) {
+        setState(() {
+          error =
+              'รหัสนักศึกษานี้ยีงไม่ได้ผูกกับอีเมลใดๆ\nสามารถกดล็อคอินปกติเพื่อผูกอีเมลได้เลย';
+          loading = false;
+        });
+        return;
+      }
+
+      String otp = (Random().nextInt(900000) + 100000).toString();
+      int expiryTime = DateTime.now()
+          .add(const Duration(minutes: 1))
+          .millisecondsSinceEpoch;
+
+      await FirestoreService().updateUser(studentId, {
+        'current_otp': otp,
+        'otp_expiry': expiryTime,
+      });
+
+      final smtpServer = gmail(systemEmail, systemAppPassword);
+      final message = Message()
+        ..from = Address(systemEmail, 'ระบบเข้าสู่ระบบ BLE')
+        ..recipients.add(registeredEmail)
+        ..subject = 'รหัส OTP สำหรับเปลี่ยนอีเมล: $otp'
+        ..html =
+            """
+          <div style="font-family: sans-serif; padding: 20px;">
+            <h2>รหัสยืนยันตัวตน (OTP)</h2>
+            <p>มีการร้องขอเพื่อ <b>เปลี่ยนอีเมล</b> ที่ผูกกับบัญชีของคุณ</p>
+            <p>รหัสสำหรับยืนยันคือ:</p>
+            <h1 style="color: #ff5722; font-size: 32px; letter-spacing: 5px;">$otp</h1>
+            <p style="color: #888;">หากคุณไม่ได้ทำรายการนี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้</p>
+            <p style="color: red; font-weight: bold;">*รหัสนี้มีอายุการใช้งาน 1 นาที*</p>
+          </div>
+        """;
+
+      await send(message, smtpServer);
+
+      setState(() {
+        _isOtpSent = true;
+        _isChangingEmail = true;
+        _targetEmail = registeredEmail;
+        loading = false;
+      });
+
+      _startResendTimer();
+    } catch (e) {
+      setState(() {
+        error = 'เกิดข้อผิดพลาดในการส่ง OTP: $e';
+        loading = false;
+      });
+    }
+  }
+
+  // --------------------------------------------------------
+  // 3. ฟังก์ชันตรวจสอบรหัส OTP และบังคับเลือกอีเมลใหม่
   // --------------------------------------------------------
   Future<void> _verifyOtp() async {
     final studentId = _studentIdCtrl.text.trim();
@@ -245,7 +344,6 @@ class _LoginPageState extends State<LoginPage> {
       if (inputOtp == savedOtp && savedOtp.isNotEmpty) {
         if (DateTime.now().millisecondsSinceEpoch > expiryTime) {
           setState(() {
-            // 🟢 แจ้งเตือนหมดอายุ แต่ไม่เปลี่ยนหน้า เพื่อให้กดปุ่มส่งใหม่ได้
             error = 'รหัส OTP หมดอายุแล้ว กรุณากดขอรหัสใหม่อีกครั้ง';
             loading = false;
           });
@@ -256,26 +354,103 @@ class _LoginPageState extends State<LoginPage> {
           return;
         }
 
-        await FirestoreService().updateUser(studentId, {
-          'current_otp': '',
-          'otp_expiry': 0,
-        });
-
-        bool isSuccess = await AuthenticationService.login(studentId);
-
-        if (isSuccess && mounted) {
-          log("OTP ถูกต้อง เข้าสู่ระบบสำเร็จ!");
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AdvertisePage(studentId: studentId),
-            ),
-          );
-        } else {
-          setState(() {
-            error = 'ระบบฐานข้อมูลขัดข้อง (ไม่สามารถเข้าสู่ระบบได้)';
-            loading = false;
+        // ==========================================
+        // 🟢 กรณีอยู่ในโหมด "เปลี่ยนอีเมล"
+        // ==========================================
+        if (_isChangingEmail) {
+          // 1. ล้างค่า OTP ก่อน แต่ยัง "ไม่ลบอีเมลเดิม"
+          await FirestoreService().updateUser(studentId, {
+            'current_otp': '',
+            'otp_expiry': 0,
           });
+
+          // 2. บังคับ SignOut Google Session เก่าทิ้ง
+          if (!_isGoogleSignInInitialized) {
+            await _googleSignIn.initialize();
+            _isGoogleSignInInitialized = true;
+          }
+          try {
+            await _googleSignIn.signOut();
+          } catch (_) {}
+
+          // 3. เด้งหน้าต่างบังคับให้เลือก Google Account ทันที
+          GoogleSignInAccount? account;
+          try {
+            account = await _googleSignIn.authenticate(scopeHint: ['email']);
+          } catch (e) {
+            setState(() => loading = false);
+            return;
+          }
+
+          // 4. ถ้าผู้ใช้กดยกเลิก ไม่เลือกอีเมล (ปิดหน้าต่างไป)
+          if (account == null) {
+            setState(() {
+              error = 'คุณยกเลิกการเลือกอีเมลใหม่ (อีเมลเดิมยังคงอยู่)';
+              _isOtpSent = false;
+              _isChangingEmail = false;
+              _otpCtrl.clear();
+              _resendTimer?.cancel();
+              loading = false;
+            });
+            return; // 🛑 หยุดการทำงาน อีเมลเก่ายังปลอดภัย
+          }
+
+          // 5. ถ้าเลือกอีเมลสำเร็จ นำอีเมลใหม่มาอัปเดตทับ
+          final String newSelectedEmail = account.email.trim();
+
+          await FirestoreService().updateUser(studentId, {
+            'email': newSelectedEmail,
+          });
+
+          // สั่ง SignOut อีกรอบเพื่อเคลียร์แคชสำหรับการล็อคอินครั้งต่อไป
+          await _googleSignIn.signOut();
+
+          // 6. กลับไปหน้าแรก พร้อมแจ้งเตือนว่าสำเร็จ
+          setState(() {
+            _isOtpSent = false;
+            _isChangingEmail = false;
+            _otpCtrl.clear();
+            _resendTimer?.cancel();
+            loading = false;
+            error = '';
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '✅ เปลี่ยนเป็นอีเมล $newSelectedEmail สำเร็จ! กรุณาเข้าสู่ระบบ',
+                ),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        }
+        // ==========================================
+        // 🟢 กรณีอยู่ในโหมด "เข้าสู่ระบบปกติ"
+        // ==========================================
+        else {
+          await FirestoreService().updateUser(studentId, {
+            'current_otp': '',
+            'otp_expiry': 0,
+          });
+
+          bool isSuccess = await AuthenticationService.login(studentId);
+
+          if (isSuccess && mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AdvertisePage(studentId: studentId),
+              ),
+            );
+          } else {
+            setState(() {
+              error = 'ระบบฐานข้อมูลขัดข้อง (ไม่สามารถเข้าสู่ระบบได้)';
+              loading = false;
+            });
+          }
         }
       } else {
         setState(() {
@@ -284,7 +459,6 @@ class _LoginPageState extends State<LoginPage> {
         });
       }
     } catch (e) {
-      log("Error verifying OTP: $e");
       setState(() {
         error = 'เกิดข้อผิดพลาดในการตรวจสอบข้อมูล';
         loading = false;
@@ -299,8 +473,14 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('เข้าสู่ระบบ'),
-        backgroundColor: Colors.blue,
+        title: Text(
+          _isChangingEmail && _isOtpSent
+              ? 'ยืนยันเพื่อเปลี่ยนอีเมล'
+              : 'เข้าสู่ระบบ',
+        ),
+        backgroundColor: _isChangingEmail && _isOtpSent
+            ? Colors.orange
+            : Colors.blue,
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
@@ -310,7 +490,9 @@ class _LoginPageState extends State<LoginPage> {
             Icon(
               _isOtpSent ? Icons.mark_email_read : Icons.account_circle,
               size: 80,
-              color: _isOtpSent ? Colors.green : Colors.blue,
+              color: _isOtpSent
+                  ? (_isChangingEmail ? Colors.orange : Colors.green)
+                  : Colors.blue,
             ),
             const SizedBox(height: 30),
 
@@ -330,15 +512,23 @@ class _LoginPageState extends State<LoginPage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
+                  color: _isChangingEmail
+                      ? Colors.orange.shade50
+                      : Colors.green.shade50,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade200),
+                  border: Border.all(
+                    color: _isChangingEmail
+                        ? Colors.orange.shade200
+                        : Colors.green.shade200,
+                  ),
                 ),
                 child: Text(
                   'ส่งรหัส OTP 6 หลักไปที่:\n$_targetEmail\nกรุณาตรวจสอบในกล่องจดหมายของคุณ',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.green,
+                  style: TextStyle(
+                    color: _isChangingEmail
+                        ? Colors.orange.shade800
+                        : Colors.green,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -350,14 +540,19 @@ class _LoginPageState extends State<LoginPage> {
                 maxLength: 6,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 24, letterSpacing: 8),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'รหัส OTP 6 หลัก',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.password),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.password),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: _isChangingEmail ? Colors.orange : Colors.blue,
+                      width: 2.0,
+                    ),
+                  ),
                 ),
               ),
 
-              // 🟢 ปุ่มขอ OTP ใหม่ พร้อมระบบนับเวลาถอยหลัง
               TextButton.icon(
                 onPressed: _resendCountdown > 0 ? null : _resendOtp,
                 icon: const Icon(Icons.refresh),
@@ -376,13 +571,14 @@ class _LoginPageState extends State<LoginPage> {
                 onPressed: () {
                   setState(() {
                     _isOtpSent = false;
+                    _isChangingEmail = false;
                     _otpCtrl.clear();
                     error = '';
-                    _resendTimer?.cancel(); // เคลียร์เวลาถอยหลังถ้ายกเลิก
+                    _resendTimer?.cancel();
                   });
                 },
                 child: const Text(
-                  'เปลี่ยนรหัสนักศึกษา / เปลี่ยนอีเมล',
+                  'ยกเลิก',
                   style: TextStyle(color: Colors.grey),
                 ),
               ),
@@ -415,15 +611,19 @@ class _LoginPageState extends State<LoginPage> {
                         strokeWidth: 2,
                       ),
                     )
-                  : Icon(_isOtpSent ? Icons.login : Icons.email),
+                  : Icon(_isOtpSent ? Icons.check_circle : Icons.email),
               label: Text(
                 _isOtpSent
-                    ? 'ยืนยัน OTP เพื่อเข้าสู่ระบบ'
+                    ? (_isChangingEmail
+                          ? 'ยืนยัน OTP เพื่อเลือกอีเมลใหม่'
+                          : 'ยืนยัน OTP เพื่อเข้าสู่ระบบ')
                     : 'เลือกอีเมลในเครื่องเพื่อรับรหัส',
                 style: const TextStyle(fontSize: 16),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _isOtpSent ? Colors.green : Colors.blue,
+                backgroundColor: _isOtpSent
+                    ? (_isChangingEmail ? Colors.orange : Colors.green)
+                    : Colors.blue,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 55),
                 shape: RoundedRectangleBorder(
@@ -431,13 +631,26 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
             ),
+
+            if (!_isOtpSent) ...[
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: loading ? null : _requestEmailChange,
+                child: const Text(
+                  'ต้องการเปลี่ยนอีเมลที่ผูกไว้?',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  // 🟢 อย่าลืม Cancel Timer เมื่อปิดหน้า เพื่อป้องกัน Memory Leak
   @override
   void dispose() {
     _resendTimer?.cancel();
