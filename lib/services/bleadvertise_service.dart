@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 // นำเข้า LogdebugService
 import '../services/logdebug_service.dart';
 
+// นำเข้า FirestoreService
+import 'firestore_service.dart';
+
 // คลาสสำหรับจัดการ Bluetooth Low Energy (BLE) ผ่าน Native Code
 class BleService {
   // สร้างช่องทางสื่อสาร (Channel) ชื่อ 'ble_advertiser' ให้ตรงกับฝั่ง Android (Native Code)
@@ -10,9 +13,15 @@ class BleService {
 
   // รับค่า bleKey ที่ต้องการส่ง
   static Future<void> startAdvertising(String bleKey) async {
+    final FirestoreService firestoreService = FirestoreService();
+    // ดึงข้อมูล UUID,CompanyID ของ Advertising Package จากใน Firebase
+    final doc = await firestoreService.getAdpack();
+    String uuid = doc['uuid'];
+    int companyid = doc['companyID'];
+
     // ตั้งค่า Advertising Package
-    String uuID = '0000feaa-0000-1000-8000-00805f9b34fb';
-    int companyID = 0xFFFF;
+    String uuID = uuid;
+    int companyID = companyid;
     bool devicename = false;
     bool connectable = false;
     bool txpowerlevel = false;

@@ -13,6 +13,13 @@ class FirestoreService {
     return _db.collection('student').doc(studentId).get();
   }
 
+  // ฟังก์ชันดึงข้อมูล User แบบครั้งเดียว (One-time get)
+  // ใช้สำหรับตอน Login เพื่อเช็ค Password
+  Future<DocumentSnapshot> getAdpack() {
+    // เข้าไปที่ Collection 'students' และเลือก Doc ตาม studentId แล้วสั่ง get()
+    return _db.collection('connect').doc('advertisingPackage').get();
+  }
+
   // ฟังก์ชันดึงข้อมูล User แบบ Real-time (Stream)
   // ใช้สำหรับหน้า Advertise เพื่อรอรับ Key ใหม่ทันทีเมื่อมีการเปลี่ยนแปลง
   Stream<DocumentSnapshot> getUserStream(String studentId) {
