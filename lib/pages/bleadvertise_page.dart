@@ -36,8 +36,6 @@ class _AdvertisePageState extends State<AdvertisePage> {
 
   // ตัวแปรเช็คว่าเป็นครั้งแรกที่โหลดหรือไม่ (สำหรับ Auto Start)
   bool _isFirstLoad = true;
-  // ตัวจัดการการดักฟังข้อมูล Firestore
-  StreamSubscription? _userSubscription;
 
   // Timer สำหรับ Burst Mode
   Timer? _bleRefreshTimer;
@@ -64,74 +62,49 @@ class _AdvertisePageState extends State<AdvertisePage> {
       }
     });
 
-    // เริ่มดักฟังข้อมูล User จาก Firebase
-    _subscribeToUserStream();
+    _ranDomKey();
+  }
+
+  Future<void> _ranDomKey() async {
+    String? storedKey = await storage.read(key: 'my_secret_key');
+    String newKey = "";
+    // มีของเก่าใช้ของเก่า / ไม่มีให้สร้างใหม่
+    if (storedKey != null && storedKey.isNotEmpty) {
+      newKey = storedKey;
+      log('Found existing key: $newKey');
+    } else {
+      log('Creating new key...');
+      newKey = generateKey(6);
+      await storage.write(key: 'my_secret_key', value: newKey);
+      try {
+        await FirestoreService().updateUser(widget.studentId, {'key': newKey});
+        log('Uploaded key to Firestore success');
+      } catch (e) {
+        log('Error uploading to Firestore: $e');
+      }
+      log('newKey :$newKey');
+    }
+    // ถ้า Key ว่างเปล่า ให้จบการทำงาน
+    if (newKey.isEmpty) {
+      log('ไม่พบ key');
+      return;
+    }
+    _autoStart(newKey);
   }
 
   // ข้อมูล User แบบ Real-time
-  void _subscribeToUserStream() {
-    _userSubscription = FirestoreService()
-        .getUserStream(widget.studentId)
-        .listen((snapshot) async {
-          // ถ้าไม่มีข้อมูล ให้จบการทำงาน
-          if (!snapshot.exists) {
-            return;
-          }
-
-          // 2. อ่าน Key จาก Storage
-          String? storedKey = await storage.read(key: 'my_secret_key');
-          String newKey = "";
-
-          // มีของเก่าใช้ของเก่า / ไม่มีให้สร้างใหม่
-          if (storedKey != null && storedKey.isNotEmpty) {
-            newKey = storedKey;
-            log('Found existing key: $newKey');
-          } else {
-            log('Creating new key...');
-            newKey = generateKey(6);
-            await storage.write(key: 'my_secret_key', value: newKey);
-            try {
-              await FirestoreService().updateUser(widget.studentId, {
-                'key': newKey,
-              });
-              log('Uploaded key to Firestore success');
-            } catch (e) {
-              log('Error uploading to Firestore: $e');
-            }
-          }
-
-          if (newKey != null) {
-            log('รหัสลับคือ: $newKey');
-          } else if (newKey.isEmpty) {
-            log('ไม่พบรหัสลับ');
-            return;
-          }
-
-          log('newKey End :$newKey');
-
-          // ถ้า Key ว่างเปล่า ให้จบการทำงาน
-          if (newKey.isEmpty) {
-            return;
-          }
-
-          // อัปเดต Key ในหน้าจอ
-          if (mounted) {
-            setState(() {
-              currentKey = newKey;
-            });
-          }
-
-          // ตรวจสอบ Logic Auto Start
-          if (_isFirstLoad) {
-            // ถ้าเป็นครั้งแรก ให้เริ่มส่งสัญญาณทันที (Auto Start)
-            _isFirstLoad = false;
-            startBurstAdvertising(newKey);
-          } else if (advertising && newKey != currentKey) {
-            // ถ้ากำลังทำงานอยู่ แต่ Key เปลี่ยน ให้เริ่มใหม่ด้วย Key ใหม่
-            debugPrint("Key changed! Restarting BLE...");
-            startBurstAdvertising(newKey);
-          }
-        });
+  void _autoStart(String newKey) async {
+    // อัปเดต Key ในหน้าจอ
+    if (mounted) {
+      setState(() {
+        currentKey = newKey;
+      });
+    }
+    // ตรวจสอบ Logic Auto Start
+    if (_isFirstLoad) {
+      _isFirstLoad = false;
+      startBurstAdvertising(newKey);
+    }
   }
 
   // เริ่มส่งสัญญาณแบบ Burst Mode (เปิด-ปิด สลับกัน)
@@ -208,10 +181,6 @@ class _AdvertisePageState extends State<AdvertisePage> {
     await BleService.stopAdvertising();
     log("Stop Advertising");
 
-    // ยกเลิกการดักฟัง Database
-    _userSubscription?.cancel();
-    log("Cancel Database");
-
     // ลบข้อมูลทั้งหมดใน Storage
     await storage.deleteAll();
 
@@ -228,7 +197,6 @@ class _AdvertisePageState extends State<AdvertisePage> {
   void dispose() {
     // คืนทรัพยากรเมื่อปิดหน้านี้
     // ป้องกัน Memory Leak แต่สำหรับการ Logout จะจัดการใน func logout() อีกที
-    _userSubscription?.cancel();
     _bleRefreshTimer?.cancel();
     BleService.stopAdvertising();
     super.dispose();
