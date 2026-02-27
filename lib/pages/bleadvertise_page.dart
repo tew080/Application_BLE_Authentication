@@ -104,34 +104,6 @@ class _AdvertisePageState extends State<AdvertisePage> {
         });
   }
 
-  Future<void> logout() async {
-    // สร้าง FlutterSecureStorage เพื่อลบข้อมูลทั้งหมดในเครื่อง
-    const storage = FlutterSecureStorage(
-      // encryptedSharedPreferences = true เพื่อเข้ารหัสข้อมูลที่จัดเก็บในเครื่อง
-      aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    );
-
-    _bleRefreshTimer?.cancel();
-    // หยุดส่งสัญญาณ Bluetooth ทันที (สำคัญมาก)
-    await BleService.stopAdvertising();
-    log("Stop Advertising");
-
-    // ยกเลิกการดักฟัง Database
-    _userSubscription?.cancel();
-    log("Cancel Database");
-
-    // ลบข้อมูลทั้งหมดใน Storage
-    await storage.deleteAll();
-
-    // กลับไปหน้า Login และล้าง Stack เดิมทิ้ง (กด Back กลับมาไม่ได้)
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-      );
-    }
-  }
-
   // เริ่มส่งสัญญาณแบบ Burst Mode (เปิด-ปิด สลับกัน)
   Future<void> startBurstAdvertising(String key) async {
     log("**** StartBurstAdvertising ****");
@@ -187,6 +159,34 @@ class _AdvertisePageState extends State<AdvertisePage> {
       });
     }
     log("State Advertising = $advertising");
+  }
+
+  Future<void> logout() async {
+    // สร้าง FlutterSecureStorage เพื่อลบข้อมูลทั้งหมดในเครื่อง
+    const storage = FlutterSecureStorage(
+      // encryptedSharedPreferences = true เพื่อเข้ารหัสข้อมูลที่จัดเก็บในเครื่อง
+      aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    );
+
+    _bleRefreshTimer?.cancel();
+    // หยุดส่งสัญญาณ Bluetooth ทันที (สำคัญมาก)
+    await BleService.stopAdvertising();
+    log("Stop Advertising");
+
+    // ยกเลิกการดักฟัง Database
+    _userSubscription?.cancel();
+    log("Cancel Database");
+
+    // ลบข้อมูลทั้งหมดใน Storage
+    await storage.deleteAll();
+
+    // กลับไปหน้า Login และล้าง Stack เดิมทิ้ง (กด Back กลับมาไม่ได้)
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+      );
+    }
   }
 
   @override
