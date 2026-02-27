@@ -181,6 +181,10 @@ class _AdvertisePageState extends State<AdvertisePage> {
     await BleService.stopAdvertising();
     log("Stop Advertising");
 
+    await FirestoreService().updateUser(widget.studentId, {
+      'loginStatus': 'false',
+    });
+
     // ลบข้อมูลทั้งหมดใน Storage
     await storage.deleteAll();
 
