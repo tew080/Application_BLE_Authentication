@@ -26,12 +26,8 @@ class _LoginPageState extends State<LoginPage> {
 
   // รับค่าจาก รหัสนักศึกษาจาก TextField
   final studentIdCtrl = TextEditingController();
-  /*// รับค่าจาก รหัส TextField
-  final passwordCtrl = TextEditingController();*/
 
   void _checkLoginState() async {
-    // ค่าที่รับมาจาก studentIdCtrl และ passwordCtrl จะต้องไม่เป็นค่าว่าง
-    //if (studentIdCtrl.text.isEmpty || passwordCtrl.text.isEmpty) {
     if (studentIdCtrl.text.isEmpty) {
       setState(() {
         error = '*กรุณากรอกข้อมูลให้ครบถ้วน*';
@@ -48,11 +44,6 @@ class _LoginPageState extends State<LoginPage> {
 
     // ดึงค่าจากช่องกรอก และลบช่องว่าง (Whitespace) ออกทั้งหมด
     final String studentId = studentIdCtrl.text.replaceAll(RegExp(r'\s+'), '');
-    // ดึงค่ารหัสผ่าน และตัดช่องว่างหน้า-หลัง
-    /*final String password = passwordCtrl.text.trim();
-
-    // เรียก AuthService เพื่อตรวจสอบข้อมูล
-    final bool ok = await AuthenticationService.login(studentId, password);*/
 
     final bool ok = await AuthenticationService.login(studentId);
     if (ok == true) {
@@ -110,14 +101,6 @@ class _LoginPageState extends State<LoginPage> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'รหัสนักศึกษา'),
             ),
-            /*const SizedBox(height: 12),
-            TextField(
-              // ให้ TextField รับค่าจาก passwordCtrl
-              controller: passwordCtrl,
-              // ซ้อนข้อความที่รับเข้ามา
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'รหัสผ่าน'),
-            ),*/
             const SizedBox(height: 20),
             // ถ้า ค่าในตัวแปล error ไม่เป็นค่าว่าง แสดงว่ามีข้อผิดพลาด จาก setState();
             if (error.isNotEmpty)
