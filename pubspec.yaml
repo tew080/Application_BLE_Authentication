@@ -40,11 +40,14 @@ dependencies:
   firebase_core: ^4.3.0
   # ใช้สำหรับฐานข้อมูล Firestore
   cloud_firestore: ^6.1.1
-
+  # Add secure storage
+  flutter_secure_storage: ^10.0.0
+  # Add google sign in
+  google_sign_in: ^7.2.0
+  # Add mailer
+  mailer: ^6.6.0
   # Add icon app
   flutter_launcher_icons: ^0.13.1
-
-  flutter_secure_storage: ^10.0.0
 
 # Add icon app
 flutter_launcher_icons:
