@@ -32,7 +32,8 @@ class _LoginPageState extends State<LoginPage> {
       setState(() {
         error = '*กรุณากรอกข้อมูลให้ครบถ้วน*';
       });
-      return; // จบการทำงานทันทีถ้าข้อมูลว่าง
+      // จบการทำงานทันทีถ้าข้อมูลว่าง
+      return;
     }
 
     setState(() {
@@ -47,7 +48,7 @@ class _LoginPageState extends State<LoginPage> {
 
     final bool ok = await AuthenticationService.login(studentId);
     if (ok == true) {
-      log("Login Successfully Status = ${ok}");
+      log("Login Successfully Status = $ok");
       // เปลี่ยนหน้าไปที่ AdvertisePage และปิดหน้า Login ทิ้ง (Back ไม่ได้)
       Navigator.pushReplacement(
         context,
@@ -66,7 +67,7 @@ class _LoginPageState extends State<LoginPage> {
      - ให้จบการทำงานตรงนี้เลย ไม่ต้องทำบรรทัดล่างต่อ
     */
     if (!mounted) {
-      log('Login Page ${mounted}');
+      log('Login Page $mounted');
       return;
     }
 
@@ -79,9 +80,8 @@ class _LoginPageState extends State<LoginPage> {
       */
       error = '*ข้อมูลไม่ถูกต้อง*';
       studentIdCtrl.clear();
-      //passwordCtrl.clear();
     });
-    log('Loading Status ${loading}');
+    log('Loading Status $loading');
   }
 
   @override
@@ -89,7 +89,7 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('เข้าสู่ระบบ')),
       body: Padding(
-        padding: const EdgeInsets.all(44),
+        padding: const EdgeInsets.all(64),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -100,6 +100,13 @@ class _LoginPageState extends State<LoginPage> {
               // รับค่าเป็นตัวเลขเท่านั้น
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'รหัสนักศึกษา'),
+              style: const TextStyle(
+                color: Colors.black,
+                // กำหนดขนาดของตัวอักษร
+                fontSize: 18,
+                // กำหนดระยะห่างระหว่างตัวอักษร
+                letterSpacing: 1.5,
+              ),
             ),
             const SizedBox(height: 20),
             // ถ้า ค่าในตัวแปล error ไม่เป็นค่าว่าง แสดงว่ามีข้อผิดพลาด จาก setState();
@@ -116,6 +123,7 @@ class _LoginPageState extends State<LoginPage> {
                   letterSpacing: 1,
                 ),
               ),
+            const SizedBox(height: 10),
             ElevatedButton(
               /*
               - ถ้าตัวแปร loading เป็น true ให้ปุ่มไม่สามารถกดได้
@@ -141,7 +149,7 @@ class _LoginPageState extends State<LoginPage> {
                 'ลงชื่อเข้าใช้',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: 18,
                   letterSpacing: 1,
                 ), // End TextStyle
               ), // End Text

@@ -33,10 +33,8 @@ class _AdvertisePageState extends State<AdvertisePage> {
   bool advertising = false;
   // เก็บ Key ปัจจุบัน
   String currentKey = "";
-
   // ตัวแปรเช็คว่าเป็นครั้งแรกที่โหลดหรือไม่ (สำหรับ Auto Start)
   bool _isFirstLoad = true;
-
   // Timer สำหรับ Burst Mode
   Timer? _bleRefreshTimer;
   // เวลาเปิดสัญญาณ (5 วินาที)
@@ -44,14 +42,15 @@ class _AdvertisePageState extends State<AdvertisePage> {
   // เวลาพักสัญญาณ (4 วินาที)
   static const Duration _burstOff = Duration(seconds: 4);
 
+  // สร้าง FlutterSecureStorage เพื่ออ่านข้อมูลที่จัดเก็บในเครื่อง
   static const storage = FlutterSecureStorage(
+    // encryptedSharedPreferences = true เพื่อเข้ารหัสข้อมูลที่จัดเก็บในเครื่อง
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
   @override
   void initState() {
     super.initState();
-
     // ดักฟัง Callback จาก Native เมื่อเริ่มส่งสัญญาณสำเร็จ
     BleService.listenAdvertisingStarted(() {
       // ถ้าหน้าจอยังแสดงอยู่ ให้เปลี่ยนสถานะ advertising เป็น true
@@ -61,27 +60,21 @@ class _AdvertisePageState extends State<AdvertisePage> {
         });
       }
     });
-
-    _ranDomKey();
+    _generateBleKey();
   }
 
-  Future<void> _ranDomKey() async {
+  Future<void> _generateBleKey() async {
     String? storedKey = await storage.read(key: 'my_secret_key');
     String newKey = "";
     // มีของเก่าใช้ของเก่า / ไม่มีให้สร้างใหม่
-    if (storedKey != null && storedKey.isNotEmpty) {
+    if (storedKey != null) {
       newKey = storedKey;
       log('Found existing key: $newKey');
     } else {
       log('Creating new key...');
       newKey = generateKey(6);
       await storage.write(key: 'my_secret_key', value: newKey);
-      try {
-        await FirestoreService().updateUser(widget.studentId, {'key': newKey});
-        log('Uploaded key to Firestore success');
-      } catch (e) {
-        log('Error uploading to Firestore: $e');
-      }
+      await FirestoreService().updateUser(widget.studentId, {'key': newKey});
       log('newKey :$newKey');
     }
     // ถ้า Key ว่างเปล่า ให้จบการทำงาน
@@ -111,11 +104,6 @@ class _AdvertisePageState extends State<AdvertisePage> {
   Future<void> startBurstAdvertising(String key) async {
     log("**** StartBurstAdvertising ****");
 
-    if (key.isEmpty) {
-      log("Error: Key is empty! Cannot start advertising.");
-      return; // จบการทำงานทันทีถ้าไม่มี Key
-    }
-
     // ยกเลิก Timer ตัวเก่าก่อน (ป้องกันการทำงานซ้อน)
     _bleRefreshTimer?.cancel();
     log("StopRefreshTimer");
@@ -130,23 +118,23 @@ class _AdvertisePageState extends State<AdvertisePage> {
         advertising = true;
       });
     }
-    log("State Advertising = $advertising");
+    log("State Advertising: $advertising");
 
     // ตั้ง Timer ให้ทำงานวนลูป
     _bleRefreshTimer = Timer.periodic(_burstOn + _burstOff, (timer) async {
-      log("[DEBUG] Reset BLE =$timer");
+      log("[DEBUG] Reset BLE: $timer");
 
       // สั่งเริ่มส่ง
       await BleService.startAdvertising(key);
-      log("StartAdvertising");
+      log("Start Advertising");
 
       // รอเวลาพัก
       await Future.delayed(_burstOff);
-      log("Delayed =$_burstOff");
+      log("Delayed: $_burstOff");
 
       // สั่งหยุดส่ง
       await BleService.stopAdvertising();
-      log("StopAdvertising");
+      log("Stop Advertising");
     });
   }
 
@@ -154,7 +142,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
   Future<void> stop() async {
     // ยกเลิก Timer
     _bleRefreshTimer?.cancel();
-    log("StopRefreshTimer");
+    log("Stop RefreshTimer");
 
     // สั่งหยุด BLE
     await BleService.stopAdvertising();
@@ -170,22 +158,16 @@ class _AdvertisePageState extends State<AdvertisePage> {
   }
 
   Future<void> logout() async {
-    // สร้าง FlutterSecureStorage เพื่อลบข้อมูลทั้งหมดในเครื่อง
-    const storage = FlutterSecureStorage(
-      // encryptedSharedPreferences = true เพื่อเข้ารหัสข้อมูลที่จัดเก็บในเครื่อง
-      aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    );
-
     _bleRefreshTimer?.cancel();
     // หยุดส่งสัญญาณ Bluetooth ทันที (สำคัญมาก)
     await BleService.stopAdvertising();
     log("Stop Advertising");
 
     await FirestoreService().updateUser(widget.studentId, {
-      'loginStatus': 'false',
+      'loginStatus': false,
     });
 
-    // ลบข้อมูลทั้งหมดใน Storage
+    // ลบข้อมูลทั้งหมดใน FlutterSecureStorage
     await storage.deleteAll();
 
     // กลับไปหน้า Login และล้าง Stack เดิมทิ้ง (กด Back กลับมาไม่ได้)
@@ -214,7 +196,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
         actions: [
           // ปุ่ม Logout มุมขวาบน
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout, size: 40, color: Colors.grey),
             tooltip: 'ออกจากระบบ',
             onPressed: () {
               // แสดง Dialog ยืนยันการออก
@@ -222,7 +204,10 @@ class _AdvertisePageState extends State<AdvertisePage> {
                 context: context,
                 builder: (context) {
                   return AlertDialog(
-                    title: const Text('ยืนยันการออก'),
+                    title: const Text(
+                      'ยืนยันการออก',
+                      textAlign: TextAlign.center,
+                    ),
                     content: const Text(
                       'คุณต้องการหยุดส่งสัญญาณและออกจากระบบหรือไม่?',
                     ),
@@ -257,31 +242,34 @@ class _AdvertisePageState extends State<AdvertisePage> {
           children: [
             // เช็คสถานะการส่งสัญญาณเพื่อแสดง UI ที่เหมาะสม
             if (advertising) ...[
-              // แสดง Animation วงกลม
+              const Icon(
+                Icons.bluetooth_connected,
+                size: 200,
+                color: Colors.blueAccent,
+              ),
               const SizedBox(height: 20),
               // แสดง Key
               Text(
-                'กำลังส่งสัญญาณ...\nKey: $currentKey',
+                'กำลังส่งสัญญาณ\nคีย์: $currentKey',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 18, color: Colors.green),
               ),
               const SizedBox(height: 10),
-              const Text(
-                "(ระบบซิงค์ข้อมูลอัตโนมัติ)",
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
             ] else ...[
               // แสดงไอคอนหยุด
               const Icon(
                 Icons.bluetooth_disabled,
-                size: 100,
+                size: 200,
                 color: Colors.grey,
               ),
               const SizedBox(height: 20),
-              const Text('ยังไม่เริ่มทำงาน'),
-              if (currentKey.isNotEmpty) Text('Key ล่าสุด: $currentKey'),
+              Text(
+                'ยังไม่เริ่มทำงาน\nคีย์: $currentKey',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18),
+              ),
             ],
-            const SizedBox(height: 40),
+            const SizedBox(height: 10),
             // ปุ่ม Start/Stop
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -301,7 +289,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
               },
               child: Text(
                 advertising ? 'หยุดส่งสัญญาณ' : 'เริ่มส่งสัญญาณ',
-                style: const TextStyle(fontSize: 16, color: Colors.white),
+                style: const TextStyle(fontSize: 19, color: Colors.white),
               ),
             ),
           ],
