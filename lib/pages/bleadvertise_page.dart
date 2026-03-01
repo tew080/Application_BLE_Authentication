@@ -12,7 +12,6 @@ import '../services/bleadvertise_service.dart';
 import '../services/logdebug_service.dart';
 // นำเข้า GenerateKeyService สำหรับการสร้างคีย์
 import '../services/generatekey_service.dart';
-
 // นำเข้าไลบรารี Flutter Secure Storage เพื่ออ่านหรือจัดเก็บข้อมูลในเครื่อง
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -72,7 +71,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
       log('Found existing key: $newKey');
     } else {
       log('Creating new key...');
-      newKey = generateKey(6);
+      newKey = generateKey(8, "key");
       await storage.write(key: 'my_secret_key', value: newKey);
       await FirestoreService().updateUser(widget.studentId, {'key': newKey});
       log('newKey :$newKey');
