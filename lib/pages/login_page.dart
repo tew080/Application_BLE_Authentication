@@ -33,6 +33,10 @@ class _LoginPageState extends State<LoginPage> {
   bool _isGoogleSignInInitialized = false;
   // ตัวแปร Boolean เพื่อติดตามว่ารหัส OTP ถูกส่งออกไปแล้วหรือไม่
   bool _isOtpSent = false;
+  // ตัวแปร Boolean เพื่อควบคุมการแสดงผลของฟิลด์แก้ไขอีเมล
+  bool editEmail = false;
+  // ตัวแปร Boolean เพื่อควบคุมการแสดงผลของปุ่มเลือกอีเมล
+  bool pickEmail = false;
   // ตัวแปร String สำหรับเก็บอีเมลเป้าหมายที่จะส่ง OTP ไป
   String _targetEmail = '';
   // สร้าง Instance ของ FirestoreService เพื่อใช้งาน
@@ -43,6 +47,16 @@ class _LoginPageState extends State<LoginPage> {
   String _systemEmail = '';
   // รหัสผ่านแอปพลิเคชันของระบบที่ใช้ในการยืนยันตัวตนเพื่อส่ง OTP
   String _systemAppPassword = '';
+  // อีเมลที่ผู้ใช้เลือกจากรายการ
+  String selectedEmail = '';
+  // อีเมลที่ผู้ใช้เลือกใหม่ (ใช้ในกรณีที่ต้องการเปลี่ยนอีเมล)
+  String newSelectedEmail = '';
+  // เวลาหมดอายุของ OTP
+  int expiryTime = 0;
+  // ตัวแปรสำหรับตรวจสอบอีเมลที่ผู้ใช้ป้อน
+  String emaillCheck = '';
+  // ตัวแปรสำหรับตรวจสอบอีเมลที่ผู้ใช้เลือก
+  String selectedEmailCheck = '';
   // รับค่าจาก รหัสนักศึกษาจาก TextField
   final studentIdCtrl = TextEditingController();
   // รับค่าจาก รหัสนักศึกษาจาก TextField
@@ -52,10 +66,18 @@ class _LoginPageState extends State<LoginPage> {
     GoogleSignInAccount? account;
     final studentId = studentIdCtrl.text.replaceAll(RegExp(r'\s+'), '');
     final userCheck = await firestoreService.getUser(studentId);
+    emaillCheck = userCheck['email'];
 
     if (!userCheck.exists) {
       setState(() {
         error = '*ไม่พบข้อมูลผู้ใช้*';
+        studentIdCtrl.clear();
+      });
+      // จบการทำงานทันทีถ้าข้อมูลว่าง
+      return;
+    } else if (emaillCheck.isEmpty) {
+      setState(() {
+        error = '*ไม่พบอีเมล*';
         studentIdCtrl.clear();
       });
       // จบการทำงานทันทีถ้าข้อมูลว่าง
@@ -71,21 +93,37 @@ class _LoginPageState extends State<LoginPage> {
     // ดำเนินการยืนยันตัวตนด้วย Google และขอสิทธิ์เข้าถึงอีเมล
     account = await _googleSignIn.authenticate(scopeHint: ['email']);
     // ดึงอีเมลที่ผู้ใช้เลือกจากข้อมูลบัญชี
-    final String selectedEmail = account.email;
+    selectedEmail = account.email;
+
+    selectedEmailCheck = userCheck['email'];
     // อัปเดตสถานะของ UI
     setState(() {
       // ให้เซ็ตตัวแปร loading = true เพื่อป้องกันการกดปุ่ม Login ซ้ำ
       loading = true;
     });
+    if (selectedEmail != emaillCheck) {
+      setState(() {
+        error = 'เมลที่ใช้ลงทะเบียนไม่ตรง: $emaillCheck ';
+        // ให้เซ็ตตัวแปร loading = true เพื่อป้องกันการกดปุ่ม Login ซ้ำ
+        loading = false;
+      });
+      // ป้องกันการค้างของ Session
+      await _googleSignIn.signOut();
+      return;
+    }
 
-    // ผูกอีเมลที่เลือกเข้ากับรหัสนักศึกษาใน Firestore
-    await FirestoreService().updateUser(studentId, {'email': selectedEmail});
     // สร้างรหัส OTP สุ่ม 6 หลัก
     String otp = generateKey(6, "otp");
+
+    expiryTime = DateTime.now()
+        .add(const Duration(seconds: 30))
+        .millisecondsSinceEpoch;
+
     // บันทึก OTP ลง Firestore
-    await FirestoreService().updateUser(studentId, {'current_otp': otp});
-    // สั่ง SignOut เพื่อให้รอบหน้ากดเลือกบัญชีใหม่ได้
-    await _googleSignIn.signOut();
+    await FirestoreService().updateUser(studentId, {
+      'current_otp': otp,
+      'otp_expiry': expiryTime,
+    });
 
     log("ผู้ใช้เลือกอีเมล: $selectedEmail");
 
@@ -112,6 +150,7 @@ class _LoginPageState extends State<LoginPage> {
                   <p>รหัสสำหรับเข้าสู่ระบบของคุณคือ:</p>
                   <h1 style="color: #2196F3; font-size: 32px; letter-spacing: 5px;">$otp</h1>
                   <p style="color: #888;">นำรหัสนี้ไปกรอกในแอปพลิเคชัน BLE</p>
+                  <p style="color: red; font-weight: bold;">*รหัสนี้มีอายุการใช้งาน 30 วินาที*</p>
                 </div>
               """;
 
@@ -120,6 +159,131 @@ class _LoginPageState extends State<LoginPage> {
 
     // อัปเดตสถานะของ UI
     setState(() {
+      pickEmail = true;
+      error = '';
+      // ตั้งค่าว่า OTP ถูกส่งแล้ว
+      _isOtpSent = true;
+      // ตั้งค่าอีเมลเป้าหมาย
+      _targetEmail = selectedEmail;
+      // ปิดสถานะการโหลด
+      loading = false;
+    });
+    // ป้องกันการค้างของ Session
+    await _googleSignIn.signOut();
+  }
+
+  Future<void> _editEmailAndSendOtp() async {
+    GoogleSignInAccount? account;
+    final studentId = studentIdCtrl.text.replaceAll(RegExp(r'\s+'), '');
+    final userCheck = await firestoreService.getUser(studentId);
+    emaillCheck = userCheck['email'];
+
+    if (!userCheck.exists) {
+      setState(() {
+        error = '*ไม่พบข้อมูลผู้ใช้*';
+        studentIdCtrl.clear();
+      });
+      // จบการทำงานทันทีถ้าข้อมูลว่าง
+      return;
+    } else if (emaillCheck.isEmpty) {
+      setState(() {
+        error = '*ไม่พบอีเมล*';
+      });
+    }
+
+    // ตรวจสอบว่าการลงชื่อเข้าใช้ด้วย Google ได้รับการเริ่มต้นแล้วหรือไม่ ถ้ายัง ให้เริ่มต้น
+    if (!_isGoogleSignInInitialized) {
+      await _googleSignIn.initialize();
+      _isGoogleSignInInitialized = true;
+    }
+
+    // ดำเนินการยืนยันตัวตนด้วย Google และขอสิทธิ์เข้าถึงอีเมล
+    account = await _googleSignIn.authenticate(scopeHint: ['email']);
+    // ดึงอีเมลที่ผู้ใช้เลือกจากข้อมูลบัญชี
+    newSelectedEmail = account.email;
+
+    selectedEmail = userCheck['email'];
+    // อัปเดตสถานะของ UI
+    setState(() {
+      editEmail = true;
+      // ให้เซ็ตตัวแปร loading = true เพื่อป้องกันการกดปุ่ม Login ซ้ำ
+      loading = true;
+    });
+    // สร้างรหัส OTP สุ่ม 6 หลัก
+    String otp = generateKey(6, "otp");
+
+    expiryTime = DateTime.now()
+        .add(const Duration(seconds: 30))
+        .millisecondsSinceEpoch;
+
+    // บันทึก OTP ลง Firestore
+    await FirestoreService().updateUser(studentId, {
+      'current_otp': otp,
+      'otp_expiry': expiryTime,
+    });
+
+    // สั่ง SignOut เพื่อให้รอบหน้ากดเลือกบัญชีใหม่ได้
+    await _googleSignIn.signOut();
+
+    log("ผู้ใช้เลือกอีเมล: $selectedEmail");
+
+    // ดึงข้อมูล UUID,CompanyID ของ Advertising Package จากใน Firebase
+    final doc = await firestoreService.getEmailAdmin();
+    _systemEmail = doc['email'];
+    _systemAppPassword = doc['emailAppPassword'];
+
+    // กำหนดค่า SMTP server โดยใช้ข้อมูลอีเมลและรหัสผ่านของระบบ
+    final smtpServer = gmail(_systemEmail, _systemAppPassword);
+    if (selectedEmail == '') {
+      // สร้างข้อความอีเมล
+      final message = Message()
+        // ตั้งค่าผู้ส่ง
+        ..from = Address(_systemEmail, 'ระบบยืนยันตัวตนเข้าใช้แอพ BLE')
+        // เพิ่มผู้รับอีเมล (อีเมลที่ผู้ใช้ป้อน)
+        ..recipients.add(newSelectedEmail)
+        // ตั้งค่าหัวข้ออีเมล
+        ..subject = 'รหัส OTP ของคุณคือ: $otp'
+        // ตั้งค่าเนื้อหาอีเมลเป็น HTML
+        ..html =
+            """
+                <div style="font-family: sans-serif; padding: 20px;">
+                  <h2>รหัสยืนยันตัวตน (OTP)</h2>
+                  <p>รหัสสำหรับเข้าสู่ระบบของคุณคือ:</p>
+                  <h1 style="color: #2196F3; font-size: 32px; letter-spacing: 5px;">$otp</h1>
+                  <p style="color: #888;">นำรหัสนี้ไปกรอกในแอปพลิเคชัน BLE</p>
+                  <p style="color: red; font-weight: bold;">*รหัสนี้มีอายุการใช้งาน 30 วินาที*</p>
+                </div>
+              """;
+
+      // ส่งอีเมลพร้อม OTP ไปยังผู้รับ
+      await send(message, smtpServer);
+    } else {
+      // สร้างข้อความอีเมล
+      final message = Message()
+        // ตั้งค่าผู้ส่ง
+        ..from = Address(_systemEmail, 'ระบบยืนยันตัวตนเข้าใช้แอพ BLE')
+        // เพิ่มผู้รับอีเมล (อีเมลที่ผู้ใช้ป้อน)
+        ..recipients.add(selectedEmail)
+        // ตั้งค่าหัวข้ออีเมล
+        ..subject = 'รหัส OTP ของคุณคือ: $otp'
+        // ตั้งค่าเนื้อหาอีเมลเป็น HTML
+        ..html =
+            """
+                <div style="font-family: sans-serif; padding: 20px;">
+                  <h2>รหัสยืนยันตัวตน (OTP)</h2>
+                  <p>รหัสสำหรับเข้าสู่ระบบของคุณคือ:</p>
+                  <h1 style="color: #2196F3; font-size: 32px; letter-spacing: 5px;">$otp</h1>
+                  <p style="color: #888;">นำรหัสนี้ไปกรอกในแอปพลิเคชัน BLE</p>
+                  <p style="color: red; font-weight: bold;">*รหัสนี้มีอายุการใช้งาน 30 วินาที*</p>
+                </div>
+              """;
+
+      // ส่งอีเมลพร้อม OTP ไปยังผู้รับ
+      await send(message, smtpServer);
+    }
+    // อัปเดตสถานะของ UI
+    setState(() {
+      error = '';
       // ตั้งค่าว่า OTP ถูกส่งแล้ว
       _isOtpSent = true;
       // ตั้งค่าอีเมลเป้าหมาย
@@ -150,6 +314,7 @@ class _LoginPageState extends State<LoginPage> {
     final bool isSuccess = await AuthenticationService.login(
       studentId,
       inputOtp,
+      expiryTime,
     );
     if (isSuccess && mounted) {
       log("OTP ถูกต้อง เข้าสู่ระบบสำเร็จ");
@@ -176,6 +341,12 @@ class _LoginPageState extends State<LoginPage> {
         // เซ็ต loading = true ป้องกันการกดปุ่มซ้ำๆ
         loading = true;
       });
+      if (editEmail == true) {
+        // ผูกอีเมลที่เลือกเข้ากับรหัสนักศึกษาใน Firestore
+        await FirestoreService().updateUser(studentId, {
+          'email': newSelectedEmail,
+        });
+      }
     }
   }
 
@@ -255,11 +426,14 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 TextButton(
                   child: const Text(
-                    'เปลี่ยนรหัสนักศึกษา / เปลี่ยนอีเมล',
+                    'เปลี่ยนรหัสนักศึกษา / เปลี่ยนอีเมล / ขอotpใหม่',
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.red),
                   ),
                   onPressed: () {
                     setState(() {
+                      pickEmail = false;
+                      editEmail = false;
                       _isOtpSent = false;
                       otpCtrl.clear();
                       error = '';
@@ -283,42 +457,84 @@ class _LoginPageState extends State<LoginPage> {
                   textAlign: TextAlign.center,
                 ),
               const SizedBox(height: 10),
-              ElevatedButton.icon(
-                label: Text(
-                  _isOtpSent
-                      ? 'ยืนยัน OTP เพื่อเข้าสู่ระบบ'
-                      : 'เลือกอีเมลในเครื่องเพื่อรับOTP',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                onPressed: loading
-                    ? null
-                    : (_isOtpSent ? _verifyOtp : _pickEmailAndSendOtp),
-                icon: loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.red,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Icon(_isOtpSent ? Icons.login : Icons.email),
-                // กำหนดสไตล์ของปุ่ม
-                style: ElevatedButton.styleFrom(
-                  // สีพื้นหลังของปุ่ม
-                  backgroundColor: Colors.blue,
-                  // สีเบื้องหน้าของปุ่ม
-                  foregroundColor: Colors.white,
-                  // กำหนดขนาดของปุ่ม
-                  minimumSize: Size(200, 50),
-                  shape: RoundedRectangleBorder(
-                    // กำหนดขอบของปุ่ม
-                    //side: BorderSide(color: Colors.indigoAccent, width: 2),
-                    // กำหนดความโค้งของขอบปุ่ม
-                    borderRadius: BorderRadius.circular(30.0),
-                  ), //End RoundedRectangleBorder
-                ), //End ElevatedButton.styleFrom
-              ), // End ElevatedButton
+              if (!editEmail) ...[
+                ElevatedButton.icon(
+                  label: Text(
+                    _isOtpSent
+                        ? 'ยืนยัน OTP เพื่อเข้าสู่ระบบ'
+                        : 'เลือกอีเมลในเครื่องเพื่อรับOTP',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  onPressed: loading
+                      ? null
+                      : (_isOtpSent ? _verifyOtp : _pickEmailAndSendOtp),
+                  icon: loading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.red,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Icon(_isOtpSent ? Icons.login : Icons.email),
+                  // กำหนดสไตล์ของปุ่ม
+                  style: ElevatedButton.styleFrom(
+                    // สีพื้นหลังของปุ่ม
+                    backgroundColor: Colors.blue,
+                    // สีเบื้องหน้าของปุ่ม
+                    foregroundColor: Colors.white,
+                    // กำหนดขนาดของปุ่ม
+                    minimumSize: Size(200, 50),
+                    shape: RoundedRectangleBorder(
+                      // กำหนดขอบของปุ่ม
+                      //side: BorderSide(color: Colors.indigoAccent, width: 2),
+                      // กำหนดความโค้งของขอบปุ่ม
+                      borderRadius: BorderRadius.circular(30.0),
+                    ), //End RoundedRectangleBorder
+                  ), //End ElevatedButton.styleFrom
+                ), // End ElevatedButton
+              ],
+
+              if (!pickEmail) ...[
+                const SizedBox(height: 10),
+                ElevatedButton.icon(
+                  label: Text(
+                    _isOtpSent
+                        ? 'ยืนยัน OTP เพื่อเข้าสู่ระบบ'
+                        : 'ผูกหรือเปลี่ยนอีเมล',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  onPressed: loading
+                      ? null
+                      : (_isOtpSent ? _verifyOtp : _editEmailAndSendOtp),
+                  icon: loading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.red,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Icon(_isOtpSent ? Icons.login : Icons.email),
+                  // กำหนดสไตล์ของปุ่ม
+                  style: ElevatedButton.styleFrom(
+                    // สีพื้นหลังของปุ่ม
+                    backgroundColor: Colors.blue,
+                    // สีเบื้องหน้าของปุ่ม
+                    foregroundColor: Colors.white,
+                    // กำหนดขนาดของปุ่ม
+                    minimumSize: Size(200, 50),
+                    shape: RoundedRectangleBorder(
+                      // กำหนดขอบของปุ่ม
+                      //side: BorderSide(color: Colors.indigoAccent, width: 2),
+                      // กำหนดความโค้งของขอบปุ่ม
+                      borderRadius: BorderRadius.circular(30.0),
+                    ), //End RoundedRectangleBorder
+                  ), //End ElevatedButton.styleFrom
+                ), // End ElevatedButton
+              ],
             ], // End Row
           ), // End Column
         ), // End Container
