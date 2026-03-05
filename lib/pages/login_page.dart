@@ -353,7 +353,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('เข้าสู่ระบบ')),
+      appBar: AppBar(title: Text(_isOtpSent ? 'ยืนยัน OTP' : 'เข้าสู่ระบบ')),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(64),
