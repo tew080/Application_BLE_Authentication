@@ -1,0 +1,575 @@
+# dashboard.py
+import os
+import json
+import webbrowser
+from datetime import datetime
+from tkinter import messagebox
+from google.cloud.firestore_v1.base_query import FieldFilter
+
+from config import Config
+import shared_state
+from logger import log
+
+def update_dashboard_data_file():
+    """ ดึงข้อมูลจาก Firebase มาเซฟเป็นไฟล์ JS เพื่อให้หน้าเว็บดึงไปโชว์แบบ Real-time """
+    if shared_state.db is None:
+        return
+
+    with shared_state.dashboard_data_lock:
+        try:
+            logs_ref = shared_state.db.collection("attendance_logs").where(filter=FieldFilter("action", "==", "Clock-IN")).stream()
+            all_logs = []
+            for doc in logs_ref:
+                d = doc.to_dict()
+                all_logs.append({
+                    "date": d.get("date"),
+                    "faculty": d.get("faculty", "ไม่ระบุ") if d.get("faculty") else "ไม่ระบุ",
+                    "branch": d.get("branch", "ไม่ระบุ") if d.get("branch") else "ไม่ระบุ"
+                })
+
+            today_date = datetime.now().strftime("%Y-%m-%d")
+            inside_query = shared_state.db.collection(Config.COLLECTION_STUDENT)\
+                .where(filter=FieldFilter("last_status", "==", "Clock-IN"))\
+                .stream()
+
+            inside_list = []
+            for doc in inside_query:
+                d = doc.to_dict()
+                if d.get("last_update_date") == today_date:
+                    inside_list.append({
+                        "faculty": d.get("faculty", "ไม่ระบุ") if d.get("faculty") else "ไม่ระบุ",
+                        "branch": d.get("branch", "ไม่ระบุ") if d.get("branch") else "ไม่ระบุ"
+                    })
+
+            js_content = f"window.rawData = {json.dumps(all_logs)};\nwindow.insideData = {json.dumps(inside_list)};"
+            file_path = os.path.join(os.getcwd(), Config.DASHBOARD_DIR_JS)
+            with open(file_path, "w", encoding="utf-8") as file:
+                file.write(js_content)
+        except Exception as e:
+            log(f"❌ Error updating dashboard data: {e}")
+
+def show_dashboard_graph():
+    if shared_state.db is None:
+        messagebox.showerror("ข้อผิดพลาด", "รอสักครู่ ระบบกำลังเชื่อมต่อฐานข้อมูล")
+        return
+
+    try:
+        log("📊 Preparing Web Dashboard (Real-time Mode)...")
+        update_dashboard_data_file()
+
+        html_content = """
+        <!DOCTYPE html>
+        <html lang="th">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>ระบบรายงานสถิติการเข้าใช้งาน (Live Dashboard)</title>
+
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+
+            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+            <style>
+                :root {
+                    --bg-color: #f1f5f9;
+                    --card-bg: #ffffff;
+                    --text-main: #1e293b;
+                    --text-muted: #64748b;
+                    --border-color: #e2e8f0;
+                    --primary: #3b82f6;
+                    --primary-hover: #2563eb;
+                }
+
+                body {
+                    font-family: 'Sarabun', sans-serif;
+                    background-color: var(--bg-color);
+                    margin: 0;
+                    padding: 30px;
+                    color: var(--text-main);
+                }
+
+                .container {
+                    max-width: 1300px;
+                    margin: 0 auto;
+                }
+
+                .header-title {
+                    font-size: 28px;
+                    font-weight: 700;
+                    margin-bottom: 24px;
+                    color: #0f172a;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                }
+
+                .dashboard-grid {
+                    display: grid;
+                    grid-template-columns: 2fr 1fr;
+                    gap: 24px;
+                    margin-bottom: 24px;
+                }
+
+                .card {
+                    background: var(--card-bg);
+                    border-radius: 12px;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+                    padding: 24px;
+                    border: 1px solid var(--border-color);
+                }
+
+                .card-title {
+                    font-size: 18px;
+                    font-weight: 600;
+                    margin-top: 0;
+                    margin-bottom: 20px;
+                    color: #334155;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .filter-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 20px;
+                }
+
+                .filter-item {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+
+                .filter-item label {
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: var(--text-muted);
+                }
+
+                select, input[type="text"] {
+                    border: 1px solid var(--border-color);
+                    border-radius: 8px;
+                    padding: 10px 14px;
+                    font-family: 'Sarabun', sans-serif;
+                    font-size: 15px;
+                    width: 100%;
+                    color: var(--text-main);
+                    background: #f8fafc;
+                    transition: 0.2s ease;
+                    box-sizing: border-box;
+                    cursor: pointer;
+                }
+
+                select:hover, input[type="text"]:hover { border-color: #cbd5e1; }
+                select:focus, input[type="text"]:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+
+                .date-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    transition: 0.3s ease;
+                }
+
+                .date-row.is-disabled {
+                    opacity: 0.5;
+                    pointer-events: none;
+                    filter: grayscale(80%);
+                }
+
+                .flatpickr-input[type="text"]:disabled {
+                    background-color: #e2e8f0;
+                    color: #94a3b8;
+                    border-color: #cbd5e1;
+                }
+
+                .kpi-card {
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+                    border-color: #bfdbfe;
+                }
+
+                .kpi-title {
+                    font-size: 20px;
+                    color: #1e3a8a;
+                    font-weight: 600;
+                    margin-bottom: 12px;
+                }
+
+                .kpi-value {
+                    font-size: 80px;
+                    font-weight: 700;
+                    color: var(--primary-hover);
+                    line-height: 1;
+                    text-shadow: 2px 2px 4px rgba(0,0,0,0.05);
+                }
+
+                .no-data { font-size: 30px; color: #94a3b8; font-weight: 500; }
+
+                .chart-card {
+                    height: 500px;
+                    width: 100%;
+                    position: relative;
+                    box-sizing: border-box;
+                }
+
+                @media (max-width: 900px) {
+                    .dashboard-grid { grid-template-columns: 1fr; }
+                    .filter-grid { grid-template-columns: 1fr; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header-title">
+                    <span style="display:flex; align-items:center; gap:8px;">
+                        📊 ระบบรายงานสถิติการเข้าใช้งานห้อง
+                        <span style="font-size:12px; background-color:#22c55e; color:white; padding:4px 8px; border-radius:20px; font-weight:bold; letter-spacing:0.5px;">🟢 LIVE</span>
+                    </span>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h2 class="card-title">⚙️ กำหนดเงื่อนไขการแสดงผล</h2>
+                        <div class="filter-grid">
+                            <div class="filter-item">
+                                <label>คณะ</label>
+                                <select id="facFilter"></select>
+                            </div>
+                            <div class="filter-item">
+                                <label>สาขา</label>
+                                <select id="branchFilter"></select>
+                            </div>
+                            <div class="filter-item">
+                                <label>ช่วงเวลา</label>
+                                <select id="presetDateFilter">
+                                    <option value="all">เวลาทั้งหมด (ตั้งแต่มีข้อมูล)</option>
+                                    <option value="7">7 วันย้อนหลัง</option>
+                                    <option value="15">15 วันย้อนหลัง</option>
+                                    <option value="30">30 วันย้อนหลัง</option>
+                                    <option value="365">1 ปีย้อนหลัง</option>
+                                    <option value="custom">กำหนดเอง (ระบุวันที่ด้านขวา)</option>
+                                </select>
+                            </div>
+                            <div class="filter-item">
+                                <label>กำหนดวันที่เอง</label>
+                                <div class="date-row" id="customDateRow">
+                                    <input type="text" id="startDate" placeholder="เริ่มต้น">
+                                    <span style="color: #94a3b8; font-weight: bold;">-</span>
+                                    <input type="text" id="endDate" placeholder="สิ้นสุด">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card kpi-card">
+                        <div class="kpi-title">👥 จำนวนผู้ใช้ที่ยังอยู่ด้านใน</div>
+                        <div class="kpi-value" id="kpiDisplay">
+                            <span class="no-data">กำลังโหลด...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card chart-card">
+                    <canvas id="myChart"></canvas>
+                </div>
+            </div>
+
+            <script>
+                let lastDataString = "";
+                let chartInstance = null;
+
+                const facFilter = document.getElementById('facFilter');
+                const branchFilter = document.getElementById('branchFilter');
+                const presetDateFilter = document.getElementById('presetDateFilter');
+                const customDateRow = document.getElementById('customDateRow');
+
+                const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+                // ตั้งค่าปฏิทิน Flatpickr
+                const dateConfig = {
+                    dateFormat: "Y-m-d",
+                    altInput: true,
+                    altFormat: "custom",
+                    maxDate: "today",
+                    formatDate: function (date, format) {
+                        if (format === "custom") {
+                            const d = date.getDate();
+                            const m = thaiMonths[date.getMonth()];
+                            const y = date.getFullYear() + 543;
+                            return d + ' ' + m + ' ' + y;
+                        }
+                        const mm = String(date.getMonth() + 1).padStart(2, '0');
+                        const dd = String(date.getDate()).padStart(2, '0');
+                        return date.getFullYear() + '-' + mm + '-' + dd;
+                    },
+                    onChange: function() {
+                        presetDateFilter.value = 'custom';
+                        applyPresetDate();
+                        updateChart();
+                    }
+                };
+
+                const startPicker = flatpickr("#startDate", dateConfig);
+                const endPicker = flatpickr("#endDate", dateConfig);
+
+                function fetchLatestData(isInitial = false) {
+                    let script = document.createElement('script');
+                    script.src = 'dashboard_data.js?t=' + new Date().getTime();
+                    script.onload = function() {
+                        const rawData = window.rawData || [];
+                        const insideData = window.insideData || [];
+                        const newDataString = JSON.stringify(rawData) + JSON.stringify(insideData);
+
+                        if (newDataString !== lastDataString) {
+                            lastDataString = newDataString;
+
+                            populateFaculties();
+                            updateBranchDropdown();
+
+                            if (isInitial) {
+                                applyPresetDate();
+                            } else {
+                                updateChart();
+                            }
+                        }
+                        document.body.removeChild(script);
+                    };
+                    script.onerror = function() {
+                        document.body.removeChild(script);
+                    };
+                    document.body.appendChild(script);
+                }
+
+                function populateFaculties() {
+                    const rawData = window.rawData || [];
+                    const selFac = facFilter.value || "คณะทั้งหมด";
+                    const uniqueFaculties = [...new Set(rawData.map(d => d.faculty))].sort();
+                    const faculties = ["คณะทั้งหมด", ...uniqueFaculties];
+
+                    facFilter.innerHTML = "";
+                    faculties.forEach(f => {
+                        let opt = document.createElement('option');
+                        opt.value = f; opt.innerText = f;
+                        facFilter.appendChild(opt);
+                    });
+
+                    if (faculties.includes(selFac)) {
+                        facFilter.value = selFac;
+                    }
+                }
+
+                function updateBranchDropdown() {
+                    const rawData = window.rawData || [];
+                    const selFac = facFilter.value;
+                    const selBranch = branchFilter.value || "สาขาทั้งหมด";
+                    branchFilter.innerHTML = "";
+
+                    let uniqueBranches = [];
+                    if(selFac !== "คณะทั้งหมด") {
+                        const filtered = rawData.filter(d => d.faculty === selFac);
+                        uniqueBranches = [...new Set(filtered.map(d => d.branch))].sort();
+                    }
+
+                    const branches = ["สาขาทั้งหมด", ...uniqueBranches];
+                    branches.forEach(b => {
+                        let opt = document.createElement('option');
+                        opt.value = b; opt.innerText = b;
+                        branchFilter.appendChild(opt);
+                    });
+
+                    if (branches.includes(selBranch)) {
+                        branchFilter.value = selBranch;
+                    } else {
+                        branchFilter.value = "สาขาทั้งหมด";
+                    }
+                }
+
+                function applyPresetDate() {
+                    const rawData = window.rawData || [];
+                    const preset = presetDateFilter.value;
+
+                    if (preset === 'custom') {
+                        if (startPicker.altInput) startPicker.altInput.disabled = false;
+                        if (endPicker.altInput) endPicker.altInput.disabled = false;
+                        customDateRow.classList.remove('is-disabled');
+                        updateChart();
+                        return;
+                    } else {
+                        if (startPicker.altInput) startPicker.altInput.disabled = true;
+                        if (endPicker.altInput) endPicker.altInput.disabled = true;
+                        customDateRow.classList.add('is-disabled');
+                    }
+
+                    const today = new Date();
+                    const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+
+                    if (preset === 'all') {
+                        let firstDateStr = todayStr;
+                        if (rawData.length > 0) {
+                            firstDateStr = rawData.reduce((min, p) => p.date < min ? p.date : min, rawData[0].date);
+                        }
+                        startPicker.setDate(firstDateStr);
+                        endPicker.setDate(todayStr);
+                    }
+                    else {
+                        const days = parseInt(preset);
+                        const pastDate = new Date();
+                        pastDate.setDate(today.getDate() - days);
+
+                        const startStr = pastDate.getFullYear() + '-' + String(pastDate.getMonth() + 1).padStart(2, '0') + '-' + String(pastDate.getDate()).padStart(2, '0');
+
+                        startPicker.setDate(startStr);
+                        endPicker.setDate(todayStr);
+                    }
+
+                    updateChart();
+                }
+
+                function updateChart() {
+                    const rawData = window.rawData || [];
+                    const insideData = window.insideData || [];
+
+                    const selFac = facFilter.value;
+                    const selBranch = branchFilter.value;
+
+                    let filteredInside = insideData.filter(d => {
+                        if (selFac !== "คณะทั้งหมด" && d.faculty !== selFac) return false;
+                        if (selBranch !== "สาขาทั้งหมด" && d.branch !== selBranch) return false;
+                        return true;
+                    });
+
+                    const kpiDisplay = document.getElementById('kpiDisplay');
+                    if (filteredInside.length > 0) {
+                        kpiDisplay.innerHTML = filteredInside.length + ' <span style="font-size:24px; color:#64748b; font-weight:normal;">คน</span>';
+                    } else {
+                        kpiDisplay.innerHTML = '<span class="no-data">ว่าง</span>';
+                    }
+
+                    const selectedStart = startPicker.selectedDates[0];
+                    const selectedEnd = endPicker.selectedDates[0];
+
+                    if (!selectedStart || !selectedEnd) return;
+
+                    const startD = new Date(selectedStart);
+                    startD.setHours(0, 0, 0, 0);
+
+                    const endD = new Date(selectedEnd);
+                    endD.setHours(23, 59, 59, 999);
+
+                    let filteredLogs = rawData.filter(d => {
+                        if (selFac !== "คณะทั้งหมด" && d.faculty !== selFac) return false;
+                        if (selBranch !== "สาขาทั้งหมด" && d.branch !== selBranch) return false;
+
+                        let logDate = new Date(d.date);
+                        if (logDate < startD || logDate > endD) return false;
+
+                        return true;
+                    });
+
+                    const groupBy = selFac === "คณะทั้งหมด" ? "faculty" : "branch";
+                    const summary = {};
+                    const groups = new Set();
+
+                    filteredLogs.forEach(row => {
+                        const d = row.date;
+                        const g = row[groupBy];
+                        groups.add(g);
+                        if (!summary[d]) summary[d] = {};
+                        summary[d][g] = (summary[d][g] || 0) + 1;
+                    });
+
+                    const sortedDates = Object.keys(summary).sort();
+                    const groupArr = Array.from(groups).sort();
+
+                    const labels = sortedDates.map(d => {
+                        let dt = new Date(d);
+                        let yearTH = dt.getFullYear() + 543;
+                        return dt.getDate() + ' ' + thaiMonths[dt.getMonth()] + ' ' + String(yearTH).slice(-2);
+                    });
+
+                    const colorPalette = [
+                        '#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#ef4444', '#06b6d4', '#f97316', '#14b8a6'
+                    ];
+
+                    const datasets = groupArr.map((g, index) => {
+                        return {
+                            label: g,
+                            data: sortedDates.map(d => summary[d][g] || 0),
+                            backgroundColor: colorPalette[index % colorPalette.length],
+                            borderRadius: 6,
+                            barPercentage: 0.6,
+                            categoryPercentage: 0.8
+                        };
+                    });
+
+                    if (chartInstance) chartInstance.destroy();
+
+                    const ctx = document.getElementById('myChart').getContext('2d');
+                    chartInstance = new Chart(ctx, {
+                        type: 'bar',
+                        data: { labels: labels, datasets: datasets },
+                        options: {
+                            animation: { duration: 500 },
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                    align: 'end',
+                                    labels: {
+                                        usePointStyle: true,
+                                        boxWidth: 8,
+                                        padding: 20,
+                                        font: { family: 'Sarabun', size: 14, weight: '500' }
+                                    }
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                                    titleFont: { family: 'Sarabun', size: 14 },
+                                    bodyFont: { family: 'Sarabun', size: 13 },
+                                    padding: 12,
+                                    cornerRadius: 8,
+                                    displayColors: true
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    grid: { display: false },
+                                    ticks: { font: { family: 'Sarabun', size: 13 }, color: '#64748b' }
+                                },
+                                y: {
+                                    beginAtZero: true,
+                                    grid: { color: '#f1f5f9', drawBorder: false },
+                                    ticks: { font: { family: 'Sarabun', size: 13 }, color: '#64748b', stepSize: 1 }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                facFilter.addEventListener('change', () => { updateBranchDropdown(); updateChart(); });
+                branchFilter.addEventListener('change', updateChart);
+                presetDateFilter.addEventListener('change', applyPresetDate);
+
+                fetchLatestData(true);
+                setInterval(() => fetchLatestData(false), 3000);
+
+            </script>
+        </body>
+        </html>
+        """
+
+        file_path = os.path.join(os.getcwd(), Config.DASHBOARD_DIR_HTML)
+        with open(file_path, "w", encoding="utf-8") as file:
+            file.write(html_content)
+
+        webbrowser.open('file://' + file_path)
+
+    except Exception as e:
+        log(f"❌ Graph Error: {e}")
+        messagebox.showerror("ข้อผิดพลาด", f"ไม่สามารถสร้างแดชบอร์ดได้: {e}")
