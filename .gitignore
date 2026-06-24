@@ -45,3 +45,4 @@ app.*.map.json
 /android/app/release
 android/app/google-services.json
 android/app/google-services-01.json
+key/studentdata-37c33-firebase-adminsdk-fbsvc-aa56be95e5.json
