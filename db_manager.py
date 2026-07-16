@@ -1,16 +1,19 @@
 # db_manager.py
 import csv
-import requests
-from datetime import datetime
-import firebase_admin
-from firebase_admin import credentials as fb_credentials, firestore
 import tkinter as tk
+from datetime import datetime
 from tkinter import filedialog, messagebox
 
-from config import Config
+import firebase_admin
+import requests
+from firebase_admin import credentials as fb_credentials
+from firebase_admin import firestore
+
 import shared_state
-from logger import log
+from config import Config
 from dashboard import update_dashboard_data_file
+from logger import log
+
 
 def init_firebase():
     try:
@@ -19,15 +22,22 @@ def init_firebase():
             firebase_admin.initialize_app(cred)
         shared_state.db = firestore.client()
         fetch_ble_config()
-        shared_state.db.collection(Config.COLLECTION_STUDENT).on_snapshot(on_snapshot_update)
-        log("✅ Firebase Connected & Syncing...")
+        shared_state.db.collection(Config.COLLECTION_STUDENT).on_snapshot(
+            on_snapshot_update
+        )
+        log("- Firebase Connected & Syncing...")
     except Exception as e:
         log(f"❌ Firebase Init Error: {e}")
         exit(1)
 
+
 def fetch_ble_config():
     try:
-        config_ref = shared_state.db.collection(Config.COLLECTION_CONFIG).document("advertisingPackage").get()
+        config_ref = (
+            shared_state.db.collection(Config.COLLECTION_CONFIG)
+            .document("advertisingPackage")
+            .get()
+        )
         if config_ref.exists:
             data = config_ref.to_dict()
             Config.TARGET_UUID = str(data.get("uuid", "")).lower()
@@ -36,9 +46,12 @@ def fetch_ble_config():
                 Config.COMPANY_ID = int(comp_id, 16)
             else:
                 Config.COMPANY_ID = int(comp_id)
-            log(f"✅ Config Loaded -> UUID: {Config.TARGET_UUID}, CompanyID: {hex(Config.COMPANY_ID)}")
+            log(
+                f"- Config Loaded -> UUID: {Config.TARGET_UUID}, CompanyID: {hex(Config.COMPANY_ID)}"
+            )
     except Exception as e:
         log(f"❌ Fetch Config Error: {e}")
+
 
 def on_snapshot_update(col_snapshot, changes, read_time):
     try:
@@ -52,12 +65,15 @@ def on_snapshot_update(col_snapshot, changes, read_time):
                     "first_name": data.get("first_name", "ไม่ระบุ"),
                     "last_name": data.get("last_name", ""),
                     "last_status": data.get("last_status", "Clock-OUT"),
-                    "last_update_date": data.get("last_update_date", "")
+                    "last_update_date": data.get("last_update_date", ""),
                 }
         shared_state.valid_keys = new_keys
-        log(f"🔄 Database Updated: Loaded {len(shared_state.valid_keys)} student keys into memory.")
+        log(
+            f"- Database Updated: Loaded {len(shared_state.valid_keys)} student keys into memory."
+        )
     except Exception as e:
         log(f"❌ Firebase Update Error: {e}")
+
 
 def sync_record_attendance(doc_id):
     now = datetime.now()
@@ -96,48 +112,32 @@ def sync_record_attendance(doc_id):
         else:
             new_status = "Clock-OUT"
 
-    student_ref.set({
-        "last_status": new_status,
-        "last_update_date": today_date
-    }, merge=True)
+    student_ref.set(
+        {"last_status": new_status, "last_update_date": today_date}, merge=True
+    )
 
     log_doc_id = f"{today_date}_{time_str.replace(':', '')}_{doc_id}"
     log_ref = shared_state.db.collection("attendance_logs").document(log_doc_id)
 
-    log_ref.set({
-        "student_id": doc_id,
-        "prefix": prefix,
-        "first_name": first_name,
-        "last_name": last_name,
-        "faculty": faculty,
-        "branch": branch,
-        "date": today_date,
-        "time": time_str,
-        "action": new_status,
-        "is_first_visit": is_first_visit_today
-    })
+    log_ref.set(
+        {
+            "student_id": doc_id,
+            "prefix": prefix,
+            "first_name": first_name,
+            "last_name": last_name,
+            "faculty": faculty,
+            "branch": branch,
+            "date": today_date,
+            "time": time_str,
+            "action": new_status,
+            "is_first_visit": is_first_visit_today,
+        }
+    )
 
-    log(f"⏰ Firebase Updated: [{new_status}] User: {doc_id}")
-
-    data_to_send = {
-        "date": today_date,
-        "time": time_str,
-        "student_id": doc_id,
-        "prefix": prefix,
-        "first_name": first_name,
-        "last_name": last_name,
-        "faculty": faculty,
-        "branch": branch,
-        "status": new_status,
-        "is_first_visit": is_first_visit_today
-    }
-
-    try:
-        requests.post(Config.WEBHOOK_URL, json=data_to_send, timeout=5)
-    except Exception as e:
-        log(f"❌ Google Sheets Webhook Error: {e}")
+    log(f"- Firebase Updated: [{new_status}] User: {doc_id}")
 
     update_dashboard_data_file()
+
 
 def import_csv_to_firebase():
     if shared_state.db is None:
@@ -145,16 +145,18 @@ def import_csv_to_firebase():
         return
 
     file_path = filedialog.askopenfilename(
-        title="Select Student CSV File",
-        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))
+        title="นำเข้าไฟล์ CSV",
+        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
     )
 
     if not file_path:
         return
 
     try:
-        log("⏳ Loading existing records from Firebase...")
-        existing_docs_stream = shared_state.db.collection(Config.COLLECTION_STUDENT).stream()
+        log("- Loading existing records from Firebase...")
+        existing_docs_stream = shared_state.db.collection(
+            Config.COLLECTION_STUDENT
+        ).stream()
 
         existing_data = {}
         for doc in existing_docs_stream:
@@ -162,11 +164,13 @@ def import_csv_to_firebase():
             if doc_info is not None:
                 existing_data[doc.id.strip()] = doc_info
 
-        with open(file_path, mode='r', encoding='utf-8-sig') as file:
+        with open(file_path, mode="r", encoding="utf-8-sig") as file:
             reader = csv.DictReader(file)
             headers = [str(h).strip() for h in reader.fieldnames if h]
-            if 'student_id' not in headers:
-                messagebox.showerror("Format Error", "CSV must contain a 'student_id' column.")
+            if "student_id" not in headers:
+                messagebox.showerror(
+                    "Format Error", "CSV must contain a 'student_id' column."
+                )
                 return
 
             batch = shared_state.db.batch()
@@ -180,22 +184,24 @@ def import_csv_to_firebase():
                         clean_val = str(v).strip() if v else ""
                         if clean_val.startswith('="') and clean_val.endswith('"'):
                             clean_val = clean_val[2:-1]
-                        elif clean_val == '=""' or clean_val == '""' or clean_val == '=':
+                        elif (
+                            clean_val == '=""' or clean_val == '""' or clean_val == "="
+                        ):
                             clean_val = ""
                         clean_row[clean_key] = clean_val
 
-                doc_id = clean_row.get('student_id', '')
+                doc_id = clean_row.get("student_id", "")
                 if not doc_id:
                     continue
 
                 student_data = {}
                 for key, val_str in clean_row.items():
-                    if key == 'student_id':
+                    if key == "student_id":
                         continue
-                    if key in ['current_otp', 'otp_expiry']:
+                    if key in ["current_otp", "otp_expiry"]:
                         student_data[key] = int(val_str) if val_str.isdigit() else 0
-                    elif key == 'loginStatus':
-                        student_data[key] = True if val_str.lower() == 'true' else False
+                    elif key == "loginStatus":
+                        student_data[key] = True if val_str.lower() == "true" else False
                     else:
                         student_data[key] = val_str
 
@@ -203,7 +209,9 @@ def import_csv_to_firebase():
                     count_skipped += 1
                     continue
 
-                doc_ref = shared_state.db.collection(Config.COLLECTION_STUDENT).document(doc_id)
+                doc_ref = shared_state.db.collection(
+                    Config.COLLECTION_STUDENT
+                ).document(doc_id)
 
                 if doc_id in existing_data:
                     db_record = existing_data[doc_id]
@@ -211,7 +219,13 @@ def import_csv_to_firebase():
 
                     for k, new_v in student_data.items():
                         db_val = db_record.get(k)
-                        if db_val is None or str(db_val).strip() in ["", "ไม่ระบุ", "-", "None", "null"]:
+                        if db_val is None or str(db_val).strip() in [
+                            "",
+                            "ไม่ระบุ",
+                            "-",
+                            "None",
+                            "null",
+                        ]:
                             if str(new_v).strip() != "":
                                 fields_to_update[k] = new_v
 
@@ -236,8 +250,11 @@ def import_csv_to_firebase():
             if operations_in_batch > 0:
                 batch.commit()
 
-            messagebox.showinfo("Import Summary", f"นำเข้าข้อมูลสำเร็จ!\nเพิ่มใหม่: {count_added} คน\nอัปเดต: {count_updated} คน")
+            messagebox.showinfo(
+                "Import Summary",
+                f"- นำเข้าข้อมูลสำเร็จ\nเพิ่มใหม่: {count_added} คน\nอัปเดต: {count_updated} คน",
+            )
 
     except Exception as e:
         log(f"❌ CSV Import Error: {e}")
-        messagebox.showerror("Import Error", f"Failed to import CSV:\n{str(e)}")
+        messagebox.showerror("Import Error", f"- นำเข้าข้อมูลจาก CSV ไม่สำเร็จ:\n{str(e)}")

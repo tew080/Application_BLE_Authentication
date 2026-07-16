@@ -46,7 +46,7 @@ def update_dashboard_data_file():
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(js_content)
         except Exception as e:
-            log(f"❌ Error updating dashboard data: {e}")
+            log(f"❌ ข้อผิดพลาดในการอัปเดตข้อมูลแดชบอร์ด : {e}")
 
 def show_dashboard_graph():
     if shared_state.db is None:
@@ -54,7 +54,7 @@ def show_dashboard_graph():
         return
 
     try:
-        log("📊 Preparing Web Dashboard (Real-time Mode)...")
+        log("- กำลังเตรียมแดชบอร์ด...")
         update_dashboard_data_file()
 
         html_content = """
@@ -72,11 +72,11 @@ def show_dashboard_graph():
             <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
             <style>
                 :root {
-                    --bg-color: #f1f5f9;
-                    --card-bg: #ffffff;
+                    --bg-color: #F9F7F7;
+                    --card-bg: #DBE2EF;
                     --text-main: #1e293b;
                     --text-muted: #64748b;
-                    --border-color: #e2e8f0;
+                    --border-color: #675D50;
                     --primary: #3b82f6;
                     --primary-hover: #2563eb;
                 }
@@ -95,11 +95,12 @@ def show_dashboard_graph():
                 }
 
                 .header-title {
-                    font-size: 28px;
+                    font-size: 32px;
                     font-weight: 700;
                     margin-bottom: 24px;
-                    color: #0f172a;
+                    color: #112D4E;
                     display: flex;
+                    justify-content: center;
                     align-items: center;
                     gap: 10px;
                 }
@@ -112,7 +113,8 @@ def show_dashboard_graph():
                 }
 
                 .card {
-                    background: var(--card-bg);
+                    //background: var(--card-bg);
+                    background: linear-gradient(135deg, #E8DFCA 20%, #F5EFE6 80%);
                     border-radius: 12px;
                     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
                     padding: 24px;
@@ -124,7 +126,7 @@ def show_dashboard_graph():
                     font-weight: 600;
                     margin-top: 0;
                     margin-bottom: 20px;
-                    color: #334155;
+                    color: #112D4E;
                     display: flex;
                     align-items: center;
                     gap: 8px;
@@ -189,13 +191,13 @@ def show_dashboard_graph():
                     flex-direction: column;
                     justify-content: center;
                     align-items: center;
-                    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-                    border-color: #bfdbfe;
+                    background: linear-gradient(135deg, #F5EFE6 20%, #E8DFCA 80%);
+                    border-color: #675D50;
                 }
 
                 .kpi-title {
                     font-size: 20px;
-                    color: #1e3a8a;
+                    color: #112D4E;
                     font-weight: 600;
                     margin-bottom: 12px;
                 }
@@ -227,14 +229,13 @@ def show_dashboard_graph():
             <div class="container">
                 <div class="header-title">
                     <span style="display:flex; align-items:center; gap:8px;">
-                        📊 ระบบรายงานสถิติการเข้าใช้งานห้อง
-                        <span style="font-size:12px; background-color:#22c55e; color:white; padding:4px 8px; border-radius:20px; font-weight:bold; letter-spacing:0.5px;">🟢 LIVE</span>
+                        ระบบรายงานสถิติการเข้าใช้งานห้อง
                     </span>
                 </div>
 
                 <div class="dashboard-grid">
                     <div class="card">
-                        <h2 class="card-title">⚙️ กำหนดเงื่อนไขการแสดงผล</h2>
+                        <h2 class="card-title">กำหนดเงื่อนไขการแสดงผล</h2>
                         <div class="filter-grid">
                             <div class="filter-item">
                                 <label>คณะ</label>
@@ -267,7 +268,7 @@ def show_dashboard_graph():
                     </div>
 
                     <div class="card kpi-card">
-                        <div class="kpi-title">👥 จำนวนผู้ใช้ที่ยังอยู่ด้านใน</div>
+                        <div class="kpi-title">จำนวนผู้ใช้ที่ยังอยู่ด้านใน</div>
                         <div class="kpi-value" id="kpiDisplay">
                             <span class="no-data">กำลังโหลด...</span>
                         </div>
@@ -493,7 +494,7 @@ def show_dashboard_graph():
                     });
 
                     const colorPalette = [
-                        '#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#ef4444', '#06b6d4', '#f97316', '#14b8a6'
+                        '#AD8B73', '#FFFBE9', '#CEAB93', '#E3CAA5', '#EEE3CB', '#967E76', '#B7C4CF', '#D7C0AE'
                     ];
 
                     const datasets = groupArr.map((g, index) => {
@@ -569,6 +570,7 @@ def show_dashboard_graph():
             file.write(html_content)
 
         webbrowser.open('file://' + file_path)
+        log("- แสดงแดชบอร์ดสถิติสำเร็จ")
 
     except Exception as e:
         log(f"❌ Graph Error: {e}")
