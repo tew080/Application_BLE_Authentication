@@ -258,3 +258,31 @@ def import_csv_to_firebase():
     except Exception as e:
         log(f"❌ CSV Import Error: {e}")
         messagebox.showerror("Import Error", f"- นำเข้าข้อมูลจาก CSV ไม่สำเร็จ:\n{str(e)}")
+
+def get_student_by_id(student_id):
+    """ฟังก์ชันสำหรับดึงข้อมูลนักศึกษาจาก Firestore ด้วยรหัส นศ."""
+    if shared_state.db is None:
+        return None
+    try:
+        # ใช้รหัส นศ เป็น Document ID ในการค้นหา
+        doc_ref = shared_state.db.collection(Config.COLLECTION_STUDENT).document(student_id)
+        doc = doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        return None
+    except Exception as e:
+        log(f"❌ Error fetching student: {e}")
+        return None
+
+def update_student_data(student_id, update_data):
+    """ฟังก์ชันสำหรับบันทึกข้อมูลที่แก้ไขแล้วทับลงไปใน Firestore"""
+    if shared_state.db is None:
+        return False
+    try:
+        doc_ref = shared_state.db.collection(Config.COLLECTION_STUDENT).document(student_id)
+        doc_ref.set(update_data, merge=True)
+        log(f"- Successfully updated student ID: {student_id}")
+        return True
+    except Exception as e:
+        log(f"❌ Error updating student: {e}")
+        return False

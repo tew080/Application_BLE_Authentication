@@ -4,500 +4,516 @@
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>ระบบรายงานสถิติการเข้าใช้งาน (Live Dashboard)</title>
-
+            <title>Access Control Analytics (Pro)</title>
+            <script src="https://cdn.tailwindcss.com"></script>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
             <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
-
             <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
             <style>
-                :root {
-                    --bg-color: #F9F7F7;
-                    --card-bg: #DBE2EF;
-                    --text-main: #1e293b;
-                    --text-muted: #64748b;
-                    --border-color: #675D50;
-                    --primary: #3b82f6;
-                    --primary-hover: #2563eb;
+                body { font-family: 'Sarabun', sans-serif; background-color: #f8fafc; }
+                .glass-card { background: white; border-radius: 16px; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04); border: 1px solid #f1f5f9; }
+                .form-select, .form-input {
+                    width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;
+                    font-family: 'Sarabun', sans-serif; font-size: 14px; outline: none; transition: all 0.2s; background: #fff;
                 }
-
-                body {
-                    font-family: 'Sarabun', sans-serif;
-                    background-color: var(--bg-color);
-                    margin: 0;
-                    padding: 30px;
-                    color: var(--text-main);
-                }
-
-                .container {
-                    max-width: 1300px;
-                    margin: 0 auto;
-                }
-
-                .header-title {
-                    font-size: 32px;
-                    font-weight: 700;
-                    margin-bottom: 24px;
-                    color: #112D4E;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    gap: 10px;
-                }
-
-                .dashboard-grid {
-                    display: grid;
-                    grid-template-columns: 2fr 1fr;
-                    gap: 24px;
-                    margin-bottom: 24px;
-                }
-
-                .card {
-                    //background: var(--card-bg);
-                    background: linear-gradient(135deg, #E8DFCA 20%, #F5EFE6 80%);
-                    border-radius: 12px;
-                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-                    padding: 24px;
-                    border: 1px solid var(--border-color);
-                }
-
-                .card-title {
-                    font-size: 18px;
-                    font-weight: 600;
-                    margin-top: 0;
-                    margin-bottom: 20px;
-                    color: #112D4E;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
-
-                .filter-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 20px;
-                }
-
-                .filter-item {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 8px;
-                }
-
-                .filter-item label {
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: var(--text-muted);
-                }
-
-                select, input[type="text"] {
-                    border: 1px solid var(--border-color);
-                    border-radius: 8px;
-                    padding: 10px 14px;
-                    font-family: 'Sarabun', sans-serif;
-                    font-size: 15px;
-                    width: 100%;
-                    color: var(--text-main);
-                    background: #f8fafc;
-                    transition: 0.2s ease;
-                    box-sizing: border-box;
-                    cursor: pointer;
-                }
-
-                select:hover, input[type="text"]:hover { border-color: #cbd5e1; }
-                select:focus, input[type="text"]:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-
-                .date-row {
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    transition: 0.3s ease;
-                }
-
-                .date-row.is-disabled {
-                    opacity: 0.5;
-                    pointer-events: none;
-                    filter: grayscale(80%);
-                }
-
-                .flatpickr-input[type="text"]:disabled {
-                    background-color: #e2e8f0;
-                    color: #94a3b8;
-                    border-color: #cbd5e1;
-                }
-
-                .kpi-card {
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                    background: linear-gradient(135deg, #F5EFE6 20%, #E8DFCA 80%);
-                    border-color: #675D50;
-                }
-
-                .kpi-title {
-                    font-size: 20px;
-                    color: #112D4E;
-                    font-weight: 600;
-                    margin-bottom: 12px;
-                }
-
-                .kpi-value {
-                    font-size: 80px;
-                    font-weight: 700;
-                    color: var(--primary-hover);
-                    line-height: 1;
-                    text-shadow: 2px 2px 4px rgba(0,0,0,0.05);
-                }
-
-                .no-data { font-size: 30px; color: #94a3b8; font-weight: 500; }
-
-                .chart-card {
-                    height: 500px;
-                    width: 100%;
-                    position: relative;
-                    box-sizing: border-box;
-                }
-
-                @media (max-width: 900px) {
-                    .dashboard-grid { grid-template-columns: 1fr; }
-                    .filter-grid { grid-template-columns: 1fr; }
-                }
+                .form-select:focus, .form-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1); }
+                .form-input:disabled { background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
+                .table-container::-webkit-scrollbar { width: 6px; }
+                .table-container::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+                .fade-in { animation: fadeIn 0.4s ease-in-out; }
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
             </style>
         </head>
-        <body>
-            <div class="container">
-                <div class="header-title">
-                    <span style="display:flex; align-items:center; gap:8px;">
-                        ระบบรายงานสถิติการเข้าใช้งานห้อง
-                    </span>
-                </div>
+        <body class="p-4 md:p-8 text-slate-800">
+            <div class="max-w-7xl mx-auto fade-in">
 
-                <div class="dashboard-grid">
-                    <div class="card">
-                        <h2 class="card-title">กำหนดเงื่อนไขการแสดงผล</h2>
-                        <div class="filter-grid">
-                            <div class="filter-item">
-                                <label>คณะ</label>
-                                <select id="facFilter"></select>
-                            </div>
-                            <div class="filter-item">
-                                <label>สาขา</label>
-                                <select id="branchFilter"></select>
-                            </div>
-                            <div class="filter-item">
-                                <label>ช่วงเวลา</label>
-                                <select id="presetDateFilter">
-                                    <option value="all">เวลาทั้งหมด (ตั้งแต่มีข้อมูล)</option>
-                                    <option value="7">7 วันย้อนหลัง</option>
-                                    <option value="15">15 วันย้อนหลัง</option>
-                                    <option value="30">30 วันย้อนหลัง</option>
-                                    <option value="365">1 ปีย้อนหลัง</option>
-                                    <option value="custom">กำหนดเอง (ระบุวันที่ด้านขวา)</option>
-                                </select>
-                            </div>
-                            <div class="filter-item">
-                                <label>กำหนดวันที่เอง</label>
-                                <div class="date-row" id="customDateRow">
-                                    <input type="text" id="startDate" placeholder="เริ่มต้น">
-                                    <span style="color: #94a3b8; font-weight: bold;">-</span>
-                                    <input type="text" id="endDate" placeholder="สิ้นสุด">
-                                </div>
-                            </div>
-                        </div>
+                <!-- Header Section -->
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                    <div>
+                        <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Access Analytics</h1>
+                        <p class="text-sm text-slate-500 mt-2 flex items-center gap-2 font-medium">
+                            <span class="relative flex h-3 w-3">
+                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                            </span>
+                            Live System Auto-Refresh
+                        </p>
                     </div>
-
-                    <div class="card kpi-card">
-                        <div class="kpi-title">จำนวนผู้ใช้ที่ยังอยู่ด้านใน</div>
-                        <div class="kpi-value" id="kpiDisplay">
-                            <span class="no-data">กำลังโหลด...</span>
+                    <div class="flex gap-3">
+                        <div class="bg-white px-5 py-2 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
+                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Local Time</p>
+                            <p id="currentTime" class="text-lg font-bold text-blue-600 leading-none mt-1"></p>
                         </div>
                     </div>
                 </div>
 
-                <div class="card chart-card">
-                    <canvas id="myChart"></canvas>
+                <!-- Filters Section -->
+                <div class="glass-card p-6 mb-8">
+                    <div class="flex items-center gap-2 mb-4">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                        <h2 class="text-base font-semibold text-slate-700">ตัวกรองข้อมูลอัจฉริยะ (Smart Filters)</h2>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-5 items-end">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">คณะ</label>
+                            <select id="facFilter" class="form-select"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">สาขา</label>
+                            <select id="branchFilter" class="form-select"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">ช่วงเวลาแบบด่วน</label>
+                            <select id="presetDateFilter" class="form-select">
+                                <option value="all" selected>ข้อมูลทั้งหมด (All Time)</option>
+                                <option value="7">7 วันย้อนหลัง</option>
+                                <option value="15">15 วันย้อนหลัง</option>
+                                <option value="30">30 วันย้อนหลัง</option>
+                                <option value="custom">กำหนดเอง (Custom Range)</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-full">
+                                <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">เริ่ม</label>
+                                <input type="text" id="startDate" class="form-input">
+                            </div>
+                            <span class="text-slate-300 mt-6">-</span>
+                            <div class="w-full">
+                                <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">สิ้นสุด</label>
+                                <input type="text" id="endDate" class="form-input">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    <div class="glass-card p-6 border-l-4 border-l-blue-500 relative overflow-hidden">
+                        <div class="absolute -right-4 -bottom-4 opacity-10">
+                            <svg class="w-24 h-24 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"></path></svg>
+                        </div>
+                        <h3 class="text-slate-500 font-semibold text-sm mb-1 z-10 relative">อยู่ในห้องขณะนี้</h3>
+                        <div class="text-4xl font-bold text-slate-800 z-10 relative mt-2"><span id="kpi-inside">0</span> <span class="text-base font-normal text-slate-400">คน</span></div>
+                    </div>
+
+                    <div class="glass-card p-6 border-l-4 border-l-emerald-500">
+                        <h3 class="text-slate-500 font-semibold text-sm mb-1">ยอดเข้าใช้งานสะสม</h3>
+                        <div class="text-4xl font-bold text-slate-800 mt-2"><span id="kpi-total">0</span> <span class="text-base font-normal text-slate-400">ครั้ง</span></div>
+                    </div>
+
+                    <div class="glass-card p-6 border-l-4 border-l-amber-500 flex flex-col justify-center">
+                        <h3 class="text-slate-500 font-semibold text-sm mb-1">กลุ่มผู้ใช้งานหลัก</h3>
+                        <div class="text-lg font-bold text-slate-800 mt-2 truncate" id="kpi-top-group" title="...">-</div>
+                        <p class="text-xs text-slate-400 mt-1">จากผลการกรอง</p>
+                    </div>
+
+                    <div class="glass-card p-6 border-l-4 border-l-purple-500 flex flex-col justify-center">
+                        <h3 class="text-slate-500 font-semibold text-sm mb-1">Peak Hour (เวลาหนาแน่น)</h3>
+                        <div class="text-2xl font-bold text-slate-800 mt-2" id="kpi-peak-hour">-</div>
+                        <p class="text-xs text-slate-400 mt-1">ช่วงเวลาที่คนเข้ามากที่สุด</p>
+                    </div>
+                </div>
+
+                <!-- Charts Section 1 -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <div class="glass-card p-6 lg:col-span-2">
+                        <h2 class="text-base font-bold text-slate-700 mb-6">สถิติการเข้าใช้งานรายวัน (Daily Trend)</h2>
+                        <div class="relative h-72">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="glass-card p-6">
+                        <h2 class="text-base font-bold text-slate-700 mb-6" id="doughnutTitle">สัดส่วนผู้ใช้งาน (Demographics)</h2>
+                        <div class="relative h-64 flex justify-center">
+                            <canvas id="distChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Section 2: Average Time -->
+                <div class="glass-card p-6 mb-8">
+                    <h2 class="text-base font-bold text-slate-700 mb-2" id="avgTimeTitle">เวลาเข้าใช้งานเฉลี่ยต่อคนต่อวัน (ชั่วโมง)</h2>
+                    <p class="text-xs text-slate-500 mb-4">นับรวมการเข้าออกหลายรอบใน 1 วันของนักศึกษาแต่ละคน เพื่อหาค่าเฉลี่ยรายวันของแต่ละคณะ</p>
+                    <div class="relative h-72">
+                        <canvas id="avgTimeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Live User Table -->
+                <div class="glass-card overflow-hidden">
+                    <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
+                        <h2 class="text-base font-bold text-slate-700 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            รายชื่อผู้ที่ยังอยู่ด้านใน (Active Users)
+                        </h2>
+                    </div>
+                    <div class="table-container max-h-80 overflow-y-auto bg-slate-50/50">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-white text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
+                                    <th class="py-4 px-6 font-bold sticky top-0 bg-white">ลำดับ</th>
+                                    <th class="py-4 px-6 font-bold sticky top-0 bg-white">เวลาที่เข้าล่าสุด (Time In)</th>
+                                    <th class="py-4 px-6 font-bold sticky top-0 bg-white">ชื่อ - นามสกุล</th>
+                                    <th class="py-4 px-6 font-bold sticky top-0 bg-white">คณะ</th>
+                                    <th class="py-4 px-6 font-bold sticky top-0 bg-white">สาขา</th>
+                                </tr>
+                            </thead>
+                            <tbody id="liveTableBody" class="text-sm text-slate-600">
+                                <!-- Data injected via JS -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
             <script>
+                // --- Variables ---
                 let lastDataString = "";
-                let chartInstance = null;
+                let trendChartInstance = null;
+                let distChartInstance = null;
+                let avgTimeChartInstance = null;
+                let currentFilteredLogs = [];
+                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'];
+                const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
+                // --- UI Elements ---
                 const facFilter = document.getElementById('facFilter');
                 const branchFilter = document.getElementById('branchFilter');
                 const presetDateFilter = document.getElementById('presetDateFilter');
-                const customDateRow = document.getElementById('customDateRow');
 
-                const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+                // --- Time Clock ---
+                setInterval(() => {
+                    const now = new Date();
+                    document.getElementById('currentTime').innerText = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second:'2-digit' });
+                }, 1000);
 
-                // ตั้งค่าปฏิทิน Flatpickr
+                // --- Flatpickr Setup ---
                 const dateConfig = {
-                    dateFormat: "Y-m-d",
-                    altInput: true,
-                    altFormat: "custom",
-                    maxDate: "today",
+                    dateFormat: "Y-m-d", altInput: true, altFormat: "custom", maxDate: "today",
                     formatDate: function (date, format) {
-                        if (format === "custom") {
-                            const d = date.getDate();
-                            const m = thaiMonths[date.getMonth()];
-                            const y = date.getFullYear() + 543;
-                            return d + ' ' + m + ' ' + y;
-                        }
-                        const mm = String(date.getMonth() + 1).padStart(2, '0');
-                        const dd = String(date.getDate()).padStart(2, '0');
-                        return date.getFullYear() + '-' + mm + '-' + dd;
+                        if (format === "custom") return date.getDate() + ' ' + thaiMonths[date.getMonth()] + ' ' + (date.getFullYear() + 543);
+                        return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
                     },
-                    onChange: function() {
-                        presetDateFilter.value = 'custom';
-                        applyPresetDate();
-                        updateChart();
-                    }
+                    onChange: () => { presetDateFilter.value = 'custom'; applyPresetDate(); renderDashboard(); }
                 };
-
                 const startPicker = flatpickr("#startDate", dateConfig);
                 const endPicker = flatpickr("#endDate", dateConfig);
 
+                // --- Core Logic ---
                 function fetchLatestData(isInitial = false) {
                     let script = document.createElement('script');
                     script.src = 'dashboard_data.js?t=' + new Date().getTime();
                     script.onload = function() {
                         const rawData = window.rawData || [];
                         const insideData = window.insideData || [];
-                        const newDataString = JSON.stringify(rawData) + JSON.stringify(insideData);
+                        const sessionData = window.sessionData || [];
+                        const newDataString = JSON.stringify(rawData) + JSON.stringify(insideData) + JSON.stringify(sessionData);
 
                         if (newDataString !== lastDataString) {
                             lastDataString = newDataString;
-
-                            populateFaculties();
-                            updateBranchDropdown();
-
-                            if (isInitial) {
-                                applyPresetDate();
-                            } else {
-                                updateChart();
-                            }
+                            updateFilterDropdowns(isInitial);
+                            if (isInitial) applyPresetDate();
+                            renderDashboard();
                         }
                         document.body.removeChild(script);
                     };
-                    script.onerror = function() {
-                        document.body.removeChild(script);
-                    };
+                    script.onerror = () => document.body.removeChild(script);
                     document.body.appendChild(script);
                 }
 
-                function populateFaculties() {
+                function updateFilterDropdowns(isInitial) {
                     const rawData = window.rawData || [];
                     const selFac = facFilter.value || "คณะทั้งหมด";
-                    const uniqueFaculties = [...new Set(rawData.map(d => d.faculty))].sort();
-                    const faculties = ["คณะทั้งหมด", ...uniqueFaculties];
+                    const selBranch = branchFilter.value || "สาขาทั้งหมด";
 
-                    facFilter.innerHTML = "";
-                    faculties.forEach(f => {
-                        let opt = document.createElement('option');
-                        opt.value = f; opt.innerText = f;
-                        facFilter.appendChild(opt);
-                    });
+                    const faculties = ["คณะทั้งหมด", ...[...new Set(rawData.map(d => d.faculty))].sort()];
+                    facFilter.innerHTML = faculties.map(f => `<option value="${f}">${f}</option>`).join('');
+                    if (faculties.includes(selFac)) facFilter.value = selFac;
 
-                    if (faculties.includes(selFac)) {
-                        facFilter.value = selFac;
-                    }
+                    updateBranchList();
                 }
 
-                function updateBranchDropdown() {
+                function updateBranchList() {
                     const rawData = window.rawData || [];
                     const selFac = facFilter.value;
-                    const selBranch = branchFilter.value || "สาขาทั้งหมด";
-                    branchFilter.innerHTML = "";
+                    const prevBranch = branchFilter.value;
 
-                    let uniqueBranches = [];
-                    if(selFac !== "คณะทั้งหมด") {
+                    let branches = ["สาขาทั้งหมด"];
+                    if (selFac !== "คณะทั้งหมด") {
                         const filtered = rawData.filter(d => d.faculty === selFac);
-                        uniqueBranches = [...new Set(filtered.map(d => d.branch))].sort();
+                        branches = [...branches, ...[...new Set(filtered.map(d => d.branch))].sort()];
                     }
 
-                    const branches = ["สาขาทั้งหมด", ...uniqueBranches];
-                    branches.forEach(b => {
-                        let opt = document.createElement('option');
-                        opt.value = b; opt.innerText = b;
-                        branchFilter.appendChild(opt);
-                    });
-
-                    if (branches.includes(selBranch)) {
-                        branchFilter.value = selBranch;
-                    } else {
-                        branchFilter.value = "สาขาทั้งหมด";
-                    }
+                    branchFilter.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+                    if (branches.includes(prevBranch)) branchFilter.value = prevBranch;
                 }
 
                 function applyPresetDate() {
                     const rawData = window.rawData || [];
                     const preset = presetDateFilter.value;
+                    const today = new Date();
+                    const todayStr = today.toISOString().split('T')[0];
 
                     if (preset === 'custom') {
-                        if (startPicker.altInput) startPicker.altInput.disabled = false;
-                        if (endPicker.altInput) endPicker.altInput.disabled = false;
-                        customDateRow.classList.remove('is-disabled');
-                        updateChart();
+                        startPicker.altInput.disabled = false; endPicker.altInput.disabled = false;
                         return;
-                    } else {
-                        if (startPicker.altInput) startPicker.altInput.disabled = true;
-                        if (endPicker.altInput) endPicker.altInput.disabled = true;
-                        customDateRow.classList.add('is-disabled');
                     }
 
-                    const today = new Date();
-                    const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+                    startPicker.altInput.disabled = true; endPicker.altInput.disabled = true;
 
                     if (preset === 'all') {
-                        let firstDateStr = todayStr;
-                        if (rawData.length > 0) {
-                            firstDateStr = rawData.reduce((min, p) => p.date < min ? p.date : min, rawData[0].date);
-                        }
+                        const firstDateStr = rawData.length > 0 ? rawData.reduce((min, p) => p.date < min ? p.date : min, rawData[0].date) : todayStr;
                         startPicker.setDate(firstDateStr);
-                        endPicker.setDate(todayStr);
-                    }
-                    else {
-                        const days = parseInt(preset);
+                    } else {
                         const pastDate = new Date();
-                        pastDate.setDate(today.getDate() - days);
-
-                        const startStr = pastDate.getFullYear() + '-' + String(pastDate.getMonth() + 1).padStart(2, '0') + '-' + String(pastDate.getDate()).padStart(2, '0');
-
-                        startPicker.setDate(startStr);
-                        endPicker.setDate(todayStr);
+                        pastDate.setDate(today.getDate() - parseInt(preset) + 1);
+                        startPicker.setDate(pastDate.toISOString().split('T')[0]);
                     }
-
-                    updateChart();
+                    endPicker.setDate(todayStr);
                 }
 
-                function updateChart() {
+                function calculatePeakHour(logs) {
+                    if (logs.length === 0) return "-";
+                    let hourCounts = {};
+                    logs.forEach(log => {
+                        let hour = log.time.split(':')[0];
+                        hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+                    });
+
+                    let peakHour = Object.keys(hourCounts).reduce((a, b) => hourCounts[a] > hourCounts[b] ? a : b);
+                    return `${peakHour}:00 - ${String(parseInt(peakHour)+1).padStart(2, '0')}:00`;
+                }
+
+                function renderDashboard() {
                     const rawData = window.rawData || [];
                     const insideData = window.insideData || [];
-
+                    const sessionData = window.sessionData || [];
                     const selFac = facFilter.value;
                     const selBranch = branchFilter.value;
 
-                    let filteredInside = insideData.filter(d => {
+                    // 1. กรองข้อมูลเวลา
+                    const startD = startPicker.selectedDates[0] ? new Date(startPicker.selectedDates[0].setHours(0,0,0,0)) : new Date(0);
+                    const endD = endPicker.selectedDates[0] ? new Date(endPicker.selectedDates[0].setHours(23,59,59,999)) : new Date();
+
+                    // 2. กรองข้อมูลทั้งหมดตามเงื่อนไข
+                    currentFilteredLogs = rawData.filter(d => {
+                        const dt = new Date(d.date);
+                        if (dt < startD || dt > endD) return false;
                         if (selFac !== "คณะทั้งหมด" && d.faculty !== selFac) return false;
                         if (selBranch !== "สาขาทั้งหมด" && d.branch !== selBranch) return false;
                         return true;
                     });
 
-                    const kpiDisplay = document.getElementById('kpiDisplay');
-                    if (filteredInside.length > 0) {
-                        kpiDisplay.innerHTML = filteredInside.length + ' <span style="font-size:24px; color:#64748b; font-weight:normal;">คน</span>';
-                    } else {
-                        kpiDisplay.innerHTML = '<span class="no-data">ว่าง</span>';
-                    }
-
-                    const selectedStart = startPicker.selectedDates[0];
-                    const selectedEnd = endPicker.selectedDates[0];
-
-                    if (!selectedStart || !selectedEnd) return;
-
-                    const startD = new Date(selectedStart);
-                    startD.setHours(0, 0, 0, 0);
-
-                    const endD = new Date(selectedEnd);
-                    endD.setHours(23, 59, 59, 999);
-
-                    let filteredLogs = rawData.filter(d => {
+                    const filteredInside = insideData.filter(d => {
                         if (selFac !== "คณะทั้งหมด" && d.faculty !== selFac) return false;
                         if (selBranch !== "สาขาทั้งหมด" && d.branch !== selBranch) return false;
-
-                        let logDate = new Date(d.date);
-                        if (logDate < startD || logDate > endD) return false;
-
                         return true;
                     });
 
+                    // --- อัปเดต KPIs ---
+                    document.getElementById('kpi-inside').innerText = filteredInside.length;
+                    document.getElementById('kpi-total').innerText = currentFilteredLogs.length;
+                    document.getElementById('kpi-peak-hour').innerText = calculatePeakHour(currentFilteredLogs);
+
+                    const groupCounts = {};
                     const groupBy = selFac === "คณะทั้งหมด" ? "faculty" : "branch";
-                    const summary = {};
-                    const groups = new Set();
+                    currentFilteredLogs.forEach(d => groupCounts[d[groupBy]] = (groupCounts[d[groupBy]] || 0) + 1);
+                    const sortedGroups = Object.entries(groupCounts).sort((a,b) => b[1] - a[1]);
+                    document.getElementById('kpi-top-group').innerText = sortedGroups.length > 0 ? sortedGroups[0][0] : "ไม่มีข้อมูล";
+                    document.getElementById('kpi-top-group').title = sortedGroups.length > 0 ? sortedGroups[0][0] : "";
 
-                    filteredLogs.forEach(row => {
-                        const d = row.date;
-                        const g = row[groupBy];
-                        groups.add(g);
-                        if (!summary[d]) summary[d] = {};
-                        summary[d][g] = (summary[d][g] || 0) + 1;
+                    // --- อัปเดต Table (Live) ---
+                                        const tbody = document.getElementById('liveTableBody');
+
+                                        if(filteredInside.length === 0) {
+                                            tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-400 bg-white">ไม่มีผู้ใช้งานที่ตรงตามเงื่อนไขในขณะนี้</td></tr>';
+                                        } else {
+                                            // 1. เรียงลำดับเวลาเข้า (Time In) จากล่าสุด (มากไปน้อย)
+                                            const sortedInside = filteredInside.sort((a, b) => b.time_in.localeCompare(a.time_in));
+
+                                            // 2. จำกัดการแสดงผลที่ 50 คนล่าสุด (เปลี่ยนเลขได้ตามต้องการ)
+                                            const maxDisplay = 50;
+                                            const displayList = sortedInside.slice(0, maxDisplay);
+
+                                            tbody.innerHTML = displayList.map((user, i) => `
+                                                <tr class="border-b border-slate-100 hover:bg-blue-50/50 transition-colors bg-white">
+                                                    <td class="py-4 px-6 text-slate-500 font-medium">${i + 1}</td>
+                                                    <td class="py-4 px-6"><span class="bg-blue-100 text-blue-700 py-1 px-2 rounded-md text-xs font-bold">${user.time_in}</span></td>
+                                                    <td class="py-4 px-6 font-bold text-slate-700">${user.first_name} ${user.last_name}</td>
+                                                    <td class="py-4 px-6 text-slate-600">${user.faculty}</td>
+                                                    <td class="py-4 px-6 text-slate-500 text-xs">${user.branch}</td>
+                                                </tr>
+                                            `).join('');
+
+                                            // 3. (Optional) เพิ่มแถวแจ้งเตือนด้านล่างสุด หากมีคนอยู่ข้างในมากกว่าที่แสดงผล
+                                            if (filteredInside.length > maxDisplay) {
+                                                tbody.innerHTML += `
+                                                    <tr>
+                                                        <td colspan="5" class="py-4 text-center text-xs text-slate-500 bg-slate-50">
+                                                            กำลังแสดง ${maxDisplay} คนล่าสุด จากทั้งหมด ${filteredInside.length} คน
+                                                        </td>
+                                                    </tr>
+                                                `;
+                                            }
+                                        }
+
+                    // --- อัปเดต Trend Chart ---
+                    const trendSummary = {};
+                    currentFilteredLogs.forEach(row => {
+                        trendSummary[row.date] = (trendSummary[row.date] || 0) + 1;
                     });
-
-                    const sortedDates = Object.keys(summary).sort();
-                    const groupArr = Array.from(groups).sort();
-
-                    const labels = sortedDates.map(d => {
-                        let dt = new Date(d);
-                        let yearTH = dt.getFullYear() + 543;
-                        return dt.getDate() + ' ' + thaiMonths[dt.getMonth()] + ' ' + String(yearTH).slice(-2);
+                    const sortedDates = Object.keys(trendSummary).sort();
+                    const trendLabels = sortedDates.map(d => {
+                        const dt = new Date(d);
+                        return dt.getDate() + ' ' + thaiMonths[dt.getMonth()];
                     });
+                    const trendValues = sortedDates.map(d => trendSummary[d]);
 
-                    const colorPalette = [
-                        '#AD8B73', '#FFFBE9', '#CEAB93', '#E3CAA5', '#EEE3CB', '#967E76', '#B7C4CF', '#D7C0AE'
-                    ];
-
-                    const datasets = groupArr.map((g, index) => {
-                        return {
-                            label: g,
-                            data: sortedDates.map(d => summary[d][g] || 0),
-                            backgroundColor: colorPalette[index % colorPalette.length],
+                    const trendDataObj = {
+                        labels: trendLabels,
+                        datasets: [{
+                            label: ' จำนวนผู้ใช้',
+                            data: trendValues,
+                            backgroundColor: 'rgba(59, 130, 246, 0.9)',
+                            hoverBackgroundColor: 'rgba(37, 99, 235, 1)',
                             borderRadius: 6,
-                            barPercentage: 0.6,
-                            categoryPercentage: 0.8
-                        };
-                    });
+                            barThickness: 'flex',
+                            maxBarThickness: 45
+                        }]
+                    };
 
-                    if (chartInstance) chartInstance.destroy();
-
-                    const ctx = document.getElementById('myChart').getContext('2d');
-                    chartInstance = new Chart(ctx, {
-                        type: 'bar',
-                        data: { labels: labels, datasets: datasets },
-                        options: {
-                            animation: { duration: 500 },
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'top',
-                                    align: 'end',
-                                    labels: {
-                                        usePointStyle: true,
-                                        boxWidth: 8,
-                                        padding: 20,
-                                        font: { family: 'Sarabun', size: 14, weight: '500' }
-                                    }
+                    if (trendChartInstance) {
+                        trendChartInstance.data = trendDataObj;
+                        trendChartInstance.update();
+                    } else {
+                        const ctx1 = document.getElementById('trendChart').getContext('2d');
+                        trendChartInstance = new Chart(ctx1, {
+                            type: 'bar',
+                            data: trendDataObj,
+                            options: {
+                                responsive: true, maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleFont: {family: 'Sarabun'}, bodyFont: {family: 'Sarabun', size: 14}, padding: 12, cornerRadius: 8 }
                                 },
-                                tooltip: {
-                                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                                    titleFont: { family: 'Sarabun', size: 14 },
-                                    bodyFont: { family: 'Sarabun', size: 13 },
-                                    padding: 12,
-                                    cornerRadius: 8,
-                                    displayColors: true
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    grid: { display: false },
-                                    ticks: { font: { family: 'Sarabun', size: 13 }, color: '#64748b' }
-                                },
-                                y: {
-                                    beginAtZero: true,
-                                    grid: { color: '#f1f5f9', drawBorder: false },
-                                    ticks: { font: { family: 'Sarabun', size: 13 }, color: '#64748b', stepSize: 1 }
+                                scales: {
+                                    y: { beginAtZero: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { stepSize: 1, font: {family: 'Sarabun'} } },
+                                    x: { grid: { display: false }, ticks: { font: {family: 'Sarabun'} } }
                                 }
                             }
-                        }
+                        });
+                    }
+
+                    // --- อัปเดต Distribution Chart ---
+                    document.getElementById('doughnutTitle').innerText = selFac === "คณะทั้งหมด" ? "สัดส่วนแบ่งตามคณะ (Faculty)" : "สัดส่วนแบ่งตามสาขา (Branch)";
+
+                    const distDataObj = {
+                        labels: sortedGroups.map(g => g[0]),
+                        datasets: [{
+                            data: sortedGroups.map(g => g[1]),
+                            backgroundColor: colors,
+                            borderWidth: 3,
+                            borderColor: '#ffffff',
+                            hoverOffset: 8
+                        }]
+                    };
+
+                    if (distChartInstance) {
+                        distChartInstance.data = distDataObj;
+                        distChartInstance.update();
+                    } else {
+                        const ctx2 = document.getElementById('distChart').getContext('2d');
+                        distChartInstance = new Chart(ctx2, {
+                            type: 'doughnut',
+                            data: distDataObj,
+                            options: {
+                                responsive: true, maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'bottom', labels: { font: { family: 'Sarabun' }, boxWidth: 12, padding: 15, usePointStyle: true } },
+                                    tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', bodyFont: {family: 'Sarabun', size: 14}, padding: 12, cornerRadius: 8 }
+                                },
+                                cutout: '65%'
+                            }
+                        });
+                    }
+
+                    // --- อัปเดต Average Time Chart (อิงยอดรวมรายวันแล้วนำมาเฉลี่ย) ---
+                    const filteredSessions = sessionData.filter(d => {
+                        const dt = new Date(d.date);
+                        if (dt < startD || dt > endD) return false;
+                        if (selFac !== "คณะทั้งหมด" && d.faculty !== selFac) return false;
+                        if (selBranch !== "สาขาทั้งหมด" && d.branch !== selBranch) return false;
+                        return true;
                     });
+
+                    const sumTime = {};
+                    const countTime = {};
+                    filteredSessions.forEach(s => {
+                        const grp = selFac === "คณะทั้งหมด" ? s.faculty : s.branch;
+                        // เอา total_hours (ยอดรวมของคนนั้นใน 1 วัน) มารวมกัน
+                        sumTime[grp] = (sumTime[grp] || 0) + s.total_hours;
+                        // นับ 1 คือ = นับ 1 คนต่อวัน
+                        countTime[grp] = (countTime[grp] || 0) + 1;
+                    });
+
+                    const avgGroups = Object.keys(sumTime).sort((a, b) => (sumTime[b] / countTime[b]) - (sumTime[a] / countTime[a]));
+                    const avgLabels = avgGroups;
+                    const avgDataValues = avgGroups.map(grp => (sumTime[grp] / countTime[grp]).toFixed(2));
+
+                    document.getElementById('avgTimeTitle').innerText = selFac === "คณะทั้งหมด" ? "เวลาเข้าใช้งานเฉลี่ยต่อคนต่อวันแบ่งตามคณะ (ชั่วโมง)" : "เวลาเข้าใช้งานเฉลี่ยต่อคนต่อวันแบ่งตามสาขา (ชั่วโมง)";
+
+                    const avgDataObj = {
+                        labels: avgLabels,
+                        datasets: [{
+                            label: ' ชั่วโมงเฉลี่ย',
+                            data: avgDataValues,
+                            backgroundColor: 'rgba(16, 185, 129, 0.85)',
+                            hoverBackgroundColor: 'rgba(5, 150, 105, 1)',
+                            borderRadius: 6,
+                            barThickness: 'flex',
+                            maxBarThickness: 50
+                        }]
+                    };
+
+                    if (avgTimeChartInstance) {
+                        avgTimeChartInstance.data = avgDataObj;
+                        avgTimeChartInstance.update();
+                    } else {
+                        const ctx3 = document.getElementById('avgTimeChart').getContext('2d');
+                        avgTimeChartInstance = new Chart(ctx3, {
+                            type: 'bar',
+                            data: avgDataObj,
+                            options: {
+                                responsive: true, maintainAspectRatio: false,
+                                indexAxis: 'x',
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        backgroundColor: 'rgba(15, 23, 42, 0.9)', titleFont: {family: 'Sarabun'},
+                                        bodyFont: {family: 'Sarabun', size: 14}, padding: 12, cornerRadius: 8,
+                                        callbacks: {
+                                            label: function(context) {
+                                                return ` เฉลี่ย ${context.raw} ชั่วโมง`;
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: {family: 'Sarabun'} } },
+                                    x: { grid: { display: false }, ticks: { font: {family: 'Sarabun'} } }
+                                }
+                            }
+                        });
+                    }
                 }
 
-                facFilter.addEventListener('change', () => { updateBranchDropdown(); updateChart(); });
-                branchFilter.addEventListener('change', updateChart);
-                presetDateFilter.addEventListener('change', applyPresetDate);
+                // --- Event Listeners ---
+                facFilter.addEventListener('change', () => { updateBranchList(); renderDashboard(); });
+                branchFilter.addEventListener('change', renderDashboard);
+                presetDateFilter.addEventListener('change', () => { applyPresetDate(); renderDashboard(); });
 
+                // Init
                 fetchLatestData(true);
                 setInterval(() => fetchLatestData(false), 3000);
 
