@@ -57,6 +57,8 @@ class _LoginPageState extends State<LoginPage> {
   String emaillCheck = '';
   // ตัวแปรสำหรับตรวจสอบอีเมลที่ผู้ใช้เลือก
   String selectedEmailCheck = '';
+  // เส้นทางอีเมลที่ต้องการตรวจสอบ (ในกรณีที่ต้องการใช้อีเมลของมหาวิทยาลัย)
+  String targetEmail = '@student.sru.ac.th';
   // รับค่าจาก รหัสนักศึกษาจาก TextField
   final studentIdCtrl = TextEditingController();
   // รับค่าจาก รหัสนักศึกษาจาก TextField
@@ -74,14 +76,12 @@ class _LoginPageState extends State<LoginPage> {
         studentIdCtrl.clear();
       });
       // จบการทำงานทันทีถ้าข้อมูลว่าง
-      return;
     } else if (emaillCheck.isEmpty) {
       setState(() {
         error = '*ไม่พบอีเมล*';
         studentIdCtrl.clear();
       });
       // จบการทำงานทันทีถ้าข้อมูลว่าง
-      return;
     }
 
     // ตรวจสอบว่าการลงชื่อเข้าใช้ด้วย Google ได้รับการเริ่มต้นแล้วหรือไม่ ถ้ายัง ให้เริ่มต้น
@@ -94,6 +94,16 @@ class _LoginPageState extends State<LoginPage> {
     account = await _googleSignIn.authenticate(scopeHint: ['email']);
     // ดึงอีเมลที่ผู้ใช้เลือกจากข้อมูลบัญชี
     selectedEmail = account.email;
+
+    // ตรวจสอบว่าโดเมนของอีเมลตรงกับที่ต้องการหรือไม่
+    if (!selectedEmail.trim().toLowerCase().endsWith(targetEmail)) {
+      setState(() {
+        error = '*กรุณาใช้อีเมลของมหาวิทยาลัย (@student.sru.ac.th) เท่านั้น*';
+        loading = false;
+      });
+      await _googleSignIn.signOut();
+      return; // จบการทำงานทันทีถ้าโดเมนไม่ถูกต้อง
+    }
 
     selectedEmailCheck = userCheck['email'];
     // อัปเดตสถานะของ UI
@@ -184,7 +194,6 @@ class _LoginPageState extends State<LoginPage> {
         studentIdCtrl.clear();
       });
       // จบการทำงานทันทีถ้าข้อมูลว่าง
-      return;
     } else if (emaillCheck.isEmpty) {
       setState(() {
         error = '*ไม่พบอีเมล*';
@@ -199,10 +208,22 @@ class _LoginPageState extends State<LoginPage> {
 
     // ดำเนินการยืนยันตัวตนด้วย Google และขอสิทธิ์เข้าถึงอีเมล
     account = await _googleSignIn.authenticate(scopeHint: ['email']);
+
     // ดึงอีเมลที่ผู้ใช้เลือกจากข้อมูลบัญชี
     newSelectedEmail = account.email;
 
+    // ตรวจสอบว่าโดเมนของอีเมลตรงกับที่ต้องการหรือไม่
+    if (!newSelectedEmail.trim().toLowerCase().endsWith(targetEmail)) {
+      setState(() {
+        error = '*กรุณาใช้อีเมลของมหาวิทยาลัย (@student.sru.ac.th) เท่านั้น*';
+        loading = false;
+      });
+      await _googleSignIn.signOut();
+      return; // จบการทำงานทันที
+    }
+
     selectedEmail = userCheck['email'];
+
     // อัปเดตสถานะของ UI
     setState(() {
       editEmail = true;
