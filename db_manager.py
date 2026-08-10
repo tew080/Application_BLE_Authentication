@@ -117,7 +117,9 @@ def sync_record_attendance(doc_id):
     )
 
     log_doc_id = f"{today_date}_{time_str.replace(':', '')}_{doc_id}"
-    log_ref = shared_state.db.collection("attendance_logs").document(log_doc_id)
+    # หมายเหตุ: Firestore ไม่มี schema ตายตัว collection "attendance_logs" จะถูก
+    # สร้างขึ้นเองโดยอัตโนมัติทันทีที่มีการ .set() เอกสารแรกลงไป ไม่ต้องสร้างล่วงหน้า
+    log_ref = shared_state.db.collection(Config.COLLECTION_ATTENDANCE).document(log_doc_id)
 
     log_ref.set(
         {
@@ -258,6 +260,124 @@ def import_csv_to_firebase():
     except Exception as e:
         log(f"❌ CSV Import Error: {e}")
         messagebox.showerror("Import Error", f"- นำเข้าข้อมูลจาก CSV ไม่สำเร็จ:\n{str(e)}")
+
+def import_attendance_csv_to_firebase():
+    """นำเข้าข้อมูล Attendance Logs จากไฟล์ CSV เข้า collection 'attendance_logs'
+    (ประยุกต์จาก import_csv_to_firebase ที่ใช้กับ collection student)"""
+
+    if shared_state.db is None:
+        messagebox.showerror("Error", "Firebase is not connected yet. Please wait.")
+        return
+
+    file_path = filedialog.askopenfilename(
+        title="นำเข้าไฟล์ CSV (Attendance Logs)",
+        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
+    )
+
+    if not file_path:
+        return
+
+    try:
+        log("- Loading existing attendance log IDs from Firebase...")
+        # attendance_logs อาจมีจำนวนเอกสารมาก จึงดึงมาแค่ field เดียว (ไม่ใช่ทั้ง document)
+        # เพื่อเช็คว่า doc_id ไหนมีอยู่แล้ว โดยไม่ต้องโหลดข้อมูลทั้งหมดมาเก็บใน memory
+        # หมายเหตุ: attendance_logs เป็นคนละ collection กับ student แยกขาดจากกันโดยสิ้นเชิง
+        # ไม่มีการรวม/แก้ทับข้อมูลข้ามกัน และไม่ต้องสร้าง collection ล่วงหน้า เพราะ Firestore
+        # จะสร้าง collection นี้ให้อัตโนมัติทันทีที่มีการเขียนเอกสารแรกลงไป (ด้านล่าง)
+        # ถ้ายังไม่เคยมีเอกสารเลย .stream() จะคืนค่าว่างเปล่า ไม่ error
+        existing_ids = set()
+        existing_docs_stream = (
+            shared_state.db.collection(Config.COLLECTION_ATTENDANCE)
+            .select(["student_id"])
+            .stream()
+        )
+        for doc in existing_docs_stream:
+            existing_ids.add(doc.id)
+
+        with open(file_path, mode="r", encoding="utf-8-sig") as file:
+            reader = csv.DictReader(file)
+            headers = [str(h).strip() for h in reader.fieldnames if h]
+            required_cols = {"student_id", "date", "time"}
+            if not required_cols.issubset(set(headers)):
+                messagebox.showerror(
+                    "Format Error",
+                    "CSV must contain 'student_id', 'date' and 'time' columns.",
+                )
+                return
+
+            batch = shared_state.db.batch()
+            count_added, count_skipped, operations_in_batch = 0, 0, 0
+
+            for row in reader:
+                clean_row = {}
+                for k, v in row.items():
+                    if k:
+                        clean_key = str(k).strip()
+                        clean_val = str(v).strip() if v else ""
+                        if clean_val.startswith('="') and clean_val.endswith('"'):
+                            clean_val = clean_val[2:-1]
+                        elif (
+                            clean_val == '=""' or clean_val == '""' or clean_val == "="
+                        ):
+                            clean_val = ""
+                        clean_row[clean_key] = clean_val
+
+                student_id = clean_row.get("student_id", "")
+                date_str = clean_row.get("date", "")
+                time_str = clean_row.get("time", "")
+
+                # ข้ามแถวที่ข้อมูลจำเป็นไม่ครบ
+                if not student_id or not date_str or not time_str:
+                    count_skipped += 1
+                    continue
+
+                # ใช้ doc_id จาก CSV ถ้ามี ไม่งั้นสร้างในรูปแบบเดียวกับ sync_record_attendance
+                # เช่น 2026-03-27_121453_6604341001104
+                doc_id = clean_row.get("doc_id", "").strip()
+                if not doc_id:
+                    doc_id = f"{date_str}_{time_str.replace(':', '')}_{student_id}"
+
+                # attendance log เป็นข้อมูล event ที่ไม่ควรถูกแก้ทับ -> ถ้ามีอยู่แล้วให้ข้าม
+                if doc_id in existing_ids:
+                    count_skipped += 1
+                    continue
+
+                log_data = {}
+                for key, val_str in clean_row.items():
+                    if key == "doc_id":
+                        continue
+                    if key == "is_first_visit":
+                        log_data[key] = val_str.strip().lower() == "true"
+                    else:
+                        log_data[key] = val_str
+
+                # .document(doc_id).set(...) จะสร้างทั้ง collection (ถ้ายังไม่มี) และเอกสารนี้
+                # ให้อัตโนมัติในคำสั่งเดียว ไม่ต้องเช็คหรือสร้าง collection แยกต่างหาก
+                doc_ref = shared_state.db.collection(Config.COLLECTION_ATTENDANCE).document(doc_id)
+                batch.set(doc_ref, log_data)
+                existing_ids.add(doc_id)
+                count_added += 1
+                operations_in_batch += 1
+
+                if operations_in_batch >= 400:
+                    batch.commit()
+                    batch = shared_state.db.batch()
+                    operations_in_batch = 0
+
+            if operations_in_batch > 0:
+                batch.commit()
+
+            messagebox.showinfo(
+                "Import Summary",
+                f"- นำเข้า Attendance Logs สำเร็จ\nเพิ่มใหม่: {count_added} รายการ\nข้าม (ซ้ำ/ข้อมูลไม่ครบ): {count_skipped} รายการ",
+            )
+
+    except Exception as e:
+        log(f"❌ Attendance Log CSV Import Error: {e}")
+        messagebox.showerror(
+            "Import Error", f"- นำเข้าข้อมูล Attendance Logs จาก CSV ไม่สำเร็จ:\n{str(e)}"
+        )
+
 
 def get_student_by_id(student_id):
     """ฟังก์ชันสำหรับดึงข้อมูลนักศึกษาจาก Firestore ด้วยรหัส นศ."""

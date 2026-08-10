@@ -3,8 +3,9 @@ class Config:
     RSSI_THRESHOLD = -66  # ระยะประมาณ 1 เมตร
     UNLOCK_DELAY = 3
 
-    FB_KEY_PATH = "key/studentdata-37c33-firebase-adminsdk-fbsvc-a64a59d6e7.json"
+    FB_KEY_PATH = "key/studentdata-37c33-firebase-adminsdk-fbsvc-cb5aa64e79.json"
     COLLECTION_STUDENT = "student"
+    COLLECTION_ATTENDANCE = "attendance_logs"
     COLLECTION_CONFIG = "connect"
     FIELD_NAME = "key"
 

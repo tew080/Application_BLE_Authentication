@@ -5,7 +5,12 @@ from tkinter import messagebox
 import shared_state
 from ble_scanner import run_background_scanner
 from dashboard import show_dashboard_graph
-from db_manager import import_csv_to_firebase, get_student_by_id, update_student_data
+from db_manager import (
+    import_csv_to_firebase,
+    import_attendance_csv_to_firebase,
+    get_student_by_id,
+    update_student_data,
+)
 from config import Config
 
 def open_edit_window(parent):
@@ -147,6 +152,23 @@ def setup_admin_gui(root):
         command=import_csv_to_firebase,
     )
     btn_import.pack(pady=10, fill=tk.X, padx=40)
+
+    lbl_crud_hint = tk.Label(
+        admin_window, text="นำเข้าประวัติการเข้าใช้งาน (Attendance Logs) CSV ไฟล์เท่านั้น", font=("Arial", 15), fg="#bdc3c7", bg="#34495e"
+    )
+    lbl_crud_hint.pack(pady=(15, 0))
+
+    btn_import_attendance = tk.Button(
+        admin_window,
+        text="นำเข้า Attendance Logs (CSV)",
+        font=("Arial", 18, "bold"),
+        bg="#8e44ad",
+        fg="white",
+        padx=10,
+        pady=8,
+        command=import_attendance_csv_to_firebase,
+    )
+    btn_import_attendance.pack(pady=10, fill=tk.X, padx=40)
 
     lbl_crud_hint = tk.Label(
         admin_window, text="จัดการข้อมูลรายบุคคล", font=("Arial", 15), fg="#bdc3c7", bg="#34495e"
