@@ -59,7 +59,8 @@ async def activate_door_unlock(device, hex_key, user_info):
 
 
 def ble_detection_callback(device, advertisement_data):
-    if shared_state.is_processing or Config.TARGET_UUID is None:
+    target_uuid = getattr(Config, 'TARGET_UUID', None)
+    if shared_state.is_processing or target_uuid is None:
         return
 
     uuids = [str(u).lower() for u in advertisement_data.service_uuids]
