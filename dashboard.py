@@ -1,7 +1,7 @@
 import os
 import json
 import webbrowser
-from datetime import datetime
+from datetime import datetime, timedelta
 from tkinter import messagebox
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -17,8 +17,29 @@ def update_dashboard_data_file():
     with shared_state.dashboard_data_lock:
         try:
             today_date = datetime.now().strftime("%Y-%m-%d")
+            
+            # --- 1. จำกัดช่วงเวลาการดึงข้อมูลเพื่อลดภาระเครื่อง (30 วันย้อนหลัง) ---
+            past_date_limit = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
 
-            logs_ref = shared_state.db.collection("attendance_logs").stream()
+            # 2. ดึงข้อมูลรายชื่อนักศึกษาล่วงหน้าเพื่อใช้ทำ Mapping ชื่อ-นามสกุล
+            student_info_map = {}
+            try:
+                students_ref = shared_state.db.collection(Config.COLLECTION_STUDENT).stream()
+                for doc in students_ref:
+                    sd = doc.to_dict()
+                    sid = sd.get("student_id", doc.id)
+                    student_info_map[sid] = {
+                        "first_name": sd.get("first_name", "ไม่ระบุ"),
+                        "last_name": sd.get("last_name", "")
+                    }
+            except Exception as ex:
+                log(f"⚠️ ไม่สามารถดึงรายชื่อนักศึกษาล่วงหน้าได้ : {ex}")
+
+            # 3. ดึงข้อมูล logs เฉพาะช่วงเวลาที่กำหนด
+            logs_ref = shared_state.db.collection("attendance_logs")\
+                .where(filter=FieldFilter("date", ">=", past_date_limit))\
+                .stream()
+                
             raw_events = []
             all_logs = []
             latest_clock_in = {}
@@ -35,8 +56,14 @@ def update_dashboard_data_file():
                 if not s_id:
                     continue
 
+                # ดึงชื่อ-นามสกุลจาก Log หรือใช้จาก Student Map
+                first_name = d.get("first_name") or student_info_map.get(s_id, {}).get("first_name", "ไม่ระบุ")
+                last_name = d.get("last_name") or student_info_map.get(s_id, {}).get("last_name", "")
+
                 raw_events.append({
                     "student_id": s_id,
+                    "first_name": first_name,
+                    "last_name": last_name,
                     "action": action,
                     "date": d_date,
                     "time": d_time,
@@ -47,13 +74,15 @@ def update_dashboard_data_file():
                 if action == "Clock-IN":
                     all_logs.append({
                         "student_id": s_id,
+                        "first_name": first_name,
+                        "last_name": last_name,
                         "date": d_date,
                         "time": d_time,
                         "faculty": faculty,
                         "branch": branch
                     })
                     if d_date == today_date:
-                        if s_id not in latest_clock_in or d_time > latest_clock_in[s_id]:
+                        if s_id not in latest_clock_in or d_time > latest_clock_in.get(s_id, ""):
                             latest_clock_in[s_id] = d_time
 
             events_by_user_date = {}
@@ -73,6 +102,8 @@ def update_dashboard_data_file():
 
                 faculty = next((e["faculty"] for e in reversed(events) if e["faculty"] != "ไม่ระบุ"), "ไม่ระบุ")
                 branch = next((e["branch"] for e in reversed(events) if e["branch"] != "ไม่ระบุ"), "ไม่ระบุ")
+                first_name = next((e["first_name"] for e in reversed(events) if e.get("first_name")), "ไม่ระบุ")
+                last_name = next((e["last_name"] for e in reversed(events) if e.get("last_name")), "")
 
                 for ev in events:
                     if ev["action"] == "Clock-IN":
@@ -93,6 +124,8 @@ def update_dashboard_data_file():
                 if total_hours_today > 0:
                     session_data.append({
                         "student_id": student_id,
+                        "first_name": first_name,
+                        "last_name": last_name,
                         "date": d_date,
                         "faculty": faculty,
                         "branch": branch,
@@ -171,30 +204,13 @@ def show_dashboard_graph():
                 .fade-in { animation: fadeIn 0.4s ease-in-out; }
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-                /* --- Highlight Animation ปรับปรุงใหม่ (ไม่กินขอบ/ไม่ล้น Box) --- */
                 @keyframes targetHighlight {
-                    0% {
-                        border-color: #f1f5f9;
-                        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
-                    }
-                    25% {
-                        border-color: #3b82f6;
-                        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.4), 0 10px 25px -5px rgba(59, 130, 246, 0.25);
-                    }
-                    75% {
-                        border-color: #3b82f6;
-                        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.4), 0 10px 25px -5px rgba(59, 130, 246, 0.25);
-                    }
-                    100% {
-                        border-color: #f1f5f9;
-                        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
-                    }
+                    0% { border-color: #f1f5f9; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04); }
+                    25% { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.4), 0 10px 25px -5px rgba(59, 130, 246, 0.25); }
+                    75% { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.4), 0 10px 25px -5px rgba(59, 130, 246, 0.25); }
+                    100% { border-color: #f1f5f9; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04); }
                 }
-                .active-target {
-                    animation: targetHighlight 2s ease-in-out;
-                    position: relative;
-                    z-index: 30 !important;
-                }
+                .active-target { animation: targetHighlight 2s ease-in-out; position: relative; z-index: 30 !important; }
             </style>
         </head>
         <body class="p-4 md:p-8 text-slate-800">
@@ -277,7 +293,7 @@ def show_dashboard_graph():
 
                             <!-- Card 2 -->
                             <div class="glass-card p-6 border-l-4 border-l-blue-500 cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all duration-300"
-                                 onclick="scrollToAndHighlight('uniqueUsersChartSection')">
+                                 onclick="scrollToAndHighlight('compareChartSection')">
                                 <h3 class="text-slate-500 font-semibold text-sm mb-1">จำนวนผู้เข้าใช้บริการรวม</h3>
                                 <div class="text-4xl font-bold text-slate-800 mt-2"><span id="kpi-unique-users">0</span> <span class="text-base font-normal text-slate-400">คน</span></div>
                             </div>
@@ -291,7 +307,7 @@ def show_dashboard_graph():
 
                             <!-- Card 4 -->
                             <div class="glass-card p-6 border-l-4 border-l-amber-500 flex flex-col justify-center h-full cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all duration-300"
-                                 onclick="scrollToAndHighlight('distChartSection')">
+                                 onclick="scrollToAndHighlight('topRankingsSection')">
                                 <div>
                                     <h3 class="text-slate-500 font-semibold text-sm mb-1" id="kpi-top-group-title">กลุ่มที่ใช้งานมากที่สุด</h3>
                                     <div class="text-lg font-bold text-slate-800 mt-1 break-words leading-tight" id="kpi-top-group">-</div>
@@ -304,37 +320,66 @@ def show_dashboard_graph():
                             </div>
                         </div>
 
+                        <!-- Top 5 Ranking Section -->
+                        <div class="glass-card p-6 w-full" id="topRankingsSection">
+                            <div class="flex justify-between items-center mb-4">
+                                <div>
+                                    <h2 class="text-base font-bold text-slate-700 flex items-center gap-2" id="top5Title">
+                                        <span>🏆</span> 5 อันดับนักศึกษาเข้าใช้งานสูงสุด (ระดับมหาวิทยาลัย)
+                                    </h2>
+                                    <p class="text-xs text-slate-500 mt-1" id="top5Subtitle">จัดอันดับจากความถี่การเข้าใช้งานทั้งหมดตามช่วงเวลาที่เลือก</p>
+                                </div>
+                            </div>
+                            <div class="table-container max-h-96 overflow-auto border border-slate-100 rounded-xl">
+                                <table class="w-full text-left border-collapse min-w-max">
+                                    <thead>
+                                        <tr class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
+                                            <th class="py-3 px-4 font-bold sticky top-0 bg-slate-50 shadow-sm w-16">อันดับ</th>
+                                            <th class="py-3 px-4 font-bold sticky top-0 bg-slate-50 shadow-sm">ชื่อ - นามสกุล</th>
+                                            <th class="py-3 px-4 font-bold sticky top-0 bg-slate-50 shadow-sm" id="top5GroupHeader">คณะ</th>
+                                            <th class="py-3 px-4 font-bold sticky top-0 bg-slate-50 shadow-sm text-right">เข้าใช้งาน</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="top5Body" class="text-sm text-slate-600">
+                                        <!-- JS Injected -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
                         <!-- Charts Section 1 -->
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div class="glass-card p-6 w-full" id="trendChartSection">
-                                <h2 class="text-base font-bold text-slate-700 mb-6">สถิติการเข้าใช้งานรายวัน (จำนวนครั้ง)</h2>
+                                <h2 class="text-base font-bold text-slate-700 mb-2">สถิติการเข้าใช้งานรายวัน</h2>
+                                <p class="text-xs text-slate-500 mb-4">เปรียบเทียบความถี่การเข้าใช้ (ครั้ง) และจำนวนผู้ใช้งานจริง (คน)</p>
                                 <div class="relative h-72 w-full">
                                     <canvas id="trendChart"></canvas>
                                 </div>
                             </div>
-                            <div class="glass-card p-6 w-full" id="distChartSection">
-                                <h2 class="text-base font-bold text-slate-700 mb-6" id="distTitle">สัดส่วนความถี่การเข้าใช้งาน (ครั้ง)</h2>
-                                <div class="relative h-72 w-full">
-                                    <canvas id="distChart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Charts Section 2 -->
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <div class="glass-card p-6 w-full" id="uniqueUsersChartSection">
-                                <h2 class="text-base font-bold text-slate-700 mb-2" id="uniqueUsersTitle">จำนวนผู้ใช้งาน (คน) จำแนกตามคณะ</h2>
-                                <p class="text-xs text-slate-500 mb-4">นับเฉพาะบุคคลที่ไม่ซ้ำกัน (Unique Users)</p>
-                                <div class="relative h-72 w-full">
-                                    <canvas id="uniqueUsersChart"></canvas>
-                                </div>
-                            </div>
-
+                            
                             <div class="glass-card p-6 w-full" id="avgTimeChartSection">
                                 <h2 class="text-base font-bold text-slate-700 mb-2" id="avgTimeTitle">เวลาเฉลี่ยในการเข้าใช้พื้นที่</h2>
                                 <p class="text-xs text-slate-500 mb-4" id="avgTimeSubtitle">คำนวณจากระยะเวลาที่ใช้งานในแต่ละวัน</p>
                                 <div class="relative h-72 w-full">
                                     <canvas id="avgTimeChart"></canvas>
+                                    <div id="avgTimeEmptyState" class="hidden absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+                                        <p class="text-sm font-semibold text-slate-500 mb-1">ยังไม่มีข้อมูลเวลาเฉลี่ยในช่วงที่เลือก</p>
+                                        <p class="text-xs text-slate-400 leading-relaxed max-w-xs">
+                                            สาเหตุหลักมักมาจากการที่นักศึกษามีแต่ประวัติ Clock-IN แต่ไม่มีการแตะบัตร Clock-OUT
+                                            ทำให้ระบบไม่สามารถนำมาลบกันเพื่อหาระยะเวลาการใช้งานได้
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Charts Section 2 (Combined Chart) -->
+                        <div class="grid grid-cols-1 gap-6">
+                            <div class="glass-card p-6 w-full" id="compareChartSection">
+                                <h2 class="text-base font-bold text-slate-700 mb-2" id="compareTitle">เปรียบเทียบความถี่การเข้าใช้งาน (ครั้ง) และ จำนวนผู้ใช้งาน (คน)</h2>
+                                <p class="text-xs text-slate-500 mb-4">แสดงผลเปรียบเทียบเพื่อดูความหนาแน่นของผู้ใช้งาน</p>
+                                <div class="relative h-80 w-full">
+                                    <canvas id="compareChart"></canvas>
                                 </div>
                             </div>
                         </div>
@@ -375,7 +420,6 @@ def show_dashboard_graph():
                     const targetEl = document.getElementById(targetId);
                     if (!targetEl) return;
 
-                    // Smooth scroll ให้อยู่กลางหน้าจอพอดี ( block: 'center' )
                     targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
                     targetEl.classList.remove('active-target');
@@ -390,9 +434,8 @@ def show_dashboard_graph():
                 // --- Variables ---
                 let lastDataString = "";
                 let trendChartInstance = null;
-                let distChartInstance = null;
                 let avgTimeChartInstance = null;
-                let uniqueUsersChartInstance = null;
+                let compareChartInstance = null;
                 let currentFilteredLogs = [];
                 
                 const categoricalColors = [
@@ -514,6 +557,57 @@ def show_dashboard_graph():
                     return `${peakHour}:00 - ${String(parseInt(peakHour)+1).padStart(2, '0')}:00 น.`;
                 }
 
+                function calculateTopStudents(logs) {
+                    const studentMap = {};
+                    logs.forEach(log => {
+                        const sid = log.student_id;
+                        if (!studentMap[sid]) {
+                            studentMap[sid] = {
+                                student_id: sid,
+                                full_name: (log.first_name !== "ไม่ระบุ" ? log.first_name : "") + " " + (log.last_name || ""),
+                                faculty: log.faculty || 'ไม่ระบุ',
+                                branch: log.branch || 'ไม่ระบุ',
+                                count: 0
+                            };
+                            if (studentMap[sid].full_name.trim() === "") {
+                                studentMap[sid].full_name = sid;
+                            }
+                        }
+                        studentMap[sid].count += 1;
+                    });
+
+                    return Object.values(studentMap)
+                        .sort((a, b) => b.count - a.count)
+                        .slice(0, 5);
+                }
+
+                function renderTop5Table(tbodyId, studentList, isFacultyView = false) {
+                    const tbody = document.getElementById(tbodyId);
+                    if (!studentList || studentList.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="py-8 text-center text-slate-400 bg-white">ไม่มีข้อมูลการเข้าใช้งานในระบบ</td></tr>';
+                        return;
+                    }
+
+                    const medalIcons = ['🥇', '🥈', '🥉'];
+
+                    tbody.innerHTML = studentList.map((st, idx) => {
+                        const rankBadge = idx < 3 
+                            ? `<span class="text-base">${medalIcons[idx]}</span>` 
+                            : `<span class="text-xs font-bold text-slate-400 pl-1">${idx + 1}</span>`;
+                        
+                        const subText = isFacultyView ? st.branch : st.faculty;
+
+                        return `
+                            <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors bg-white">
+                                <td class="py-3 px-4 font-medium whitespace-nowrap">${rankBadge}</td>
+                                <td class="py-3 px-4 font-semibold text-slate-700 whitespace-nowrap">${st.full_name}</td>
+                                <td class="py-3 px-4 text-xs text-slate-500 max-w-[140px] truncate" title="${subText}">${subText}</td>
+                                <td class="py-3 px-4 text-right whitespace-nowrap"><span class="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md font-bold text-xs">${st.count} ครั้ง</span></td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+
                 function renderDashboard() {
                     const rawData = window.rawData || [];
                     const insideData = window.insideData || [];
@@ -524,9 +618,12 @@ def show_dashboard_graph():
                     const startD = startPicker.selectedDates[0] ? new Date(startPicker.selectedDates[0].setHours(0,0,0,0)) : new Date(0);
                     const endD = endPicker.selectedDates[0] ? new Date(endPicker.selectedDates[0].setHours(23,59,59,999)) : new Date();
 
-                    currentFilteredLogs = rawData.filter(d => {
+                    const dateFilteredLogs = rawData.filter(d => {
                         const dt = new Date(d.date);
-                        if (dt < startD || dt > endD) return false;
+                        return dt >= startD && dt <= endD;
+                    });
+
+                    currentFilteredLogs = dateFilteredLogs.filter(d => {
                         if (selFac !== "คณะทั้งหมด" && d.faculty !== selFac) return false;
                         if (selBranch !== "สาขาทั้งหมด" && d.branch !== selBranch) return false;
                         return true;
@@ -552,6 +649,31 @@ def show_dashboard_graph():
                     
                     document.getElementById('kpi-top-group-title').innerText = selFac === "คณะทั้งหมด" ? "คณะที่เข้าใช้งานมากที่สุด" : "สาขาที่เข้าใช้งานมากที่สุด";
                     document.getElementById('kpi-top-group').innerText = sortedGroups.length > 0 ? sortedGroups[0][0] : "ไม่มีข้อมูล";
+
+                    // --- Render Top 5 Section ---
+                    const top5Title = document.getElementById('top5Title');
+                    const top5Subtitle = document.getElementById('top5Subtitle');
+                    const top5GroupHeader = document.getElementById('top5GroupHeader');
+
+                    let logsForRanking = [];
+                    let isFacultyView = false;
+
+                    if (selFac === "คณะทั้งหมด") {
+                        isFacultyView = false;
+                        logsForRanking = dateFilteredLogs; 
+                        top5Title.innerHTML = `<span>🏆</span> 5 อันดับนักศึกษาเข้าใช้งานสูงสุด (ระดับมหาวิทยาลัย)`;
+                        top5Subtitle.innerText = `จัดอันดับจากความถี่การเข้าใช้งานทั้งหมด (ทุกคณะ)`;
+                        top5GroupHeader.innerText = `คณะ`;
+                    } else {
+                        isFacultyView = true;
+                        logsForRanking = currentFilteredLogs; 
+                        top5Title.innerHTML = `<span>🎓</span> 5 อันดับนักศึกษาเข้าใช้งานสูงสุด (<span class="text-blue-600">คณะ${selFac}</span>)`;
+                        top5Subtitle.innerText = `จัดอันดับจำแนกเฉพาะในระดับคณะ`;
+                        top5GroupHeader.innerText = `สาขา`;
+                    }
+
+                    const top5Data = calculateTopStudents(logsForRanking);
+                    renderTop5Table('top5Body', top5Data, isFacultyView);
 
                     // --- Table ---
                     const tbody = document.getElementById('liveTableBody');
@@ -583,17 +705,25 @@ def show_dashboard_graph():
                         }
                     }
 
-                    // --- Trend Chart ---
+                    // --- Daily Trend Chart (เปรียบเทียบ ความถี่ vs จำนวนคน) ---
                     const trendSummary = {};
+                    const dailyUsersMap = {};
+
                     currentFilteredLogs.forEach(row => {
                         trendSummary[row.date] = (trendSummary[row.date] || 0) + 1;
+                        if (!dailyUsersMap[row.date]) {
+                            dailyUsersMap[row.date] = new Set();
+                        }
+                        dailyUsersMap[row.date].add(row.student_id);
                     });
+
                     const sortedDates = Object.keys(trendSummary).sort();
                     const trendLabels = sortedDates.map(d => {
                         const dt = new Date(d);
                         return dt.getDate() + ' ' + thaiMonths[dt.getMonth()];
                     });
-                    const trendValues = sortedDates.map(d => trendSummary[d]);
+                    const trendFreqValues = sortedDates.map(d => trendSummary[d]);
+                    const trendUserValues = sortedDates.map(d => dailyUsersMap[d] ? dailyUsersMap[d].size : 0);
 
                     if (trendChartInstance) trendChartInstance.destroy();
                     const ctx1 = document.getElementById('trendChart').getContext('2d');
@@ -601,11 +731,35 @@ def show_dashboard_graph():
                         type: 'bar',
                         data: {
                             labels: trendLabels,
-                            datasets: [{ label: ' จำนวนครั้ง', data: trendValues, backgroundColor: 'rgba(99, 102, 241, 0.9)', borderRadius: 4, maxBarThickness: 45 }]
+                            datasets: [
+                                { 
+                                    label: ' ความถี่ (ครั้ง)', 
+                                    data: trendFreqValues, 
+                                    backgroundColor: '#6366f1', 
+                                    borderRadius: 4 
+                                },
+                                { 
+                                    label: ' ผู้ใช้งาน (คน)', 
+                                    data: trendUserValues, 
+                                    backgroundColor: '#10b981', 
+                                    borderRadius: 4 
+                                }
+                            ]
                         },
                         options: {
                             responsive: true, maintainAspectRatio: false,
-                            plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleFont: {family: 'Sarabun'}, bodyFont: {family: 'Sarabun', size: 14} } },
+                            plugins: { 
+                                legend: { 
+                                    display: true, 
+                                    position: 'top', 
+                                    labels: { font: {family: 'Sarabun', size: 12} } 
+                                }, 
+                                tooltip: { 
+                                    backgroundColor: 'rgba(15, 23, 42, 0.9)', 
+                                    titleFont: {family: 'Sarabun'}, 
+                                    bodyFont: {family: 'Sarabun', size: 14} 
+                                } 
+                            },
                             scales: {
                                 y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { stepSize: 1, font: {family: 'Sarabun'} } },
                                 x: { grid: { display: false }, ticks: { font: {family: 'Sarabun'} } }
@@ -613,36 +767,14 @@ def show_dashboard_graph():
                         }
                     });
 
-                    // --- Distribution Chart ---
-                    document.getElementById('distTitle').innerText = selFac === "คณะทั้งหมด" ? "สัดส่วนความถี่การเข้าใช้งาน (ครั้ง) จำแนกตามคณะ" : "สัดส่วนความถี่การเข้าใช้งาน (ครั้ง) จำแนกตามสาขา";
+                    // --- Combined Compare Chart (ความถี่ vs จำนวนคน ตามคณะ/สาขา) ---
+                    document.getElementById('compareTitle').innerText = selFac === "คณะทั้งหมด" 
+                        ? "เปรียบเทียบความถี่การเข้าใช้งาน (ครั้ง) และ จำนวนผู้ใช้งาน (คน) จำแนกตามคณะ" 
+                        : "เปรียบเทียบความถี่การเข้าใช้งาน (ครั้ง) และ จำนวนผู้ใช้งาน (คน) จำแนกตามสาขา";
+
                     const distLabels = sortedGroups.map(g => g[0]);
                     const distValues = sortedGroups.map(g => g[1]);
-                    const distColors = distLabels.map((_, i) => categoricalColors[i % categoricalColors.length]);
 
-                    if (distChartInstance) distChartInstance.destroy();
-                    const ctx2 = document.getElementById('distChart').getContext('2d');
-                    distChartInstance = new Chart(ctx2, {
-                        type: 'bar',
-                        data: {
-                            labels: distLabels,
-                            datasets: [{ label: ' จำนวนครั้ง', data: distValues, backgroundColor: distColors, borderRadius: 4 }]
-                        },
-                        options: {
-                            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                            plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', bodyFont: {family: 'Sarabun', size: 14} } },
-                            scales: {
-                                x: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { stepSize: 1, font: {family: 'Sarabun'} } },
-                                y: { 
-                                    grid: { display: false }, 
-                                    ticks: { font: {family: 'Sarabun'}, callback: function(val, index) { return truncateLabel(this.getLabelForValue(val)); } } 
-                                }
-                            }
-                        }
-                    });
-
-                    // --- Unique Users Chart ---
-                    document.getElementById('uniqueUsersTitle').innerText = selFac === "คณะทั้งหมด" ? "จำนวนผู้ใช้งาน (คน) จำแนกตามคณะ" : "จำนวนผู้ใช้งาน (คน) จำแนกตามสาขา";
-                    
                     const uniqueUsersMap = {};
                     currentFilteredLogs.forEach(d => {
                         if (!uniqueUsersMap[d.student_id]) {
@@ -655,31 +787,56 @@ def show_dashboard_graph():
                         uniqueGroupCounts[d[groupBy]] = (uniqueGroupCounts[d[groupBy]] || 0) + 1;
                     });
 
-                    const sortedUniqueGroups = Object.entries(uniqueGroupCounts).sort((a,b) => b[1] - a[1]);
-                    const uniqueLabels = sortedUniqueGroups.map(g => g[0]);
-                    const uniqueValues = sortedUniqueGroups.map(g => g[1]);
-                    
-                    const uniqueColors = uniqueLabels.map(label => {
-                        const distIndex = distLabels.indexOf(label);
-                        return distIndex !== -1 ? categoricalColors[distIndex % categoricalColors.length] : '#94a3b8';
-                    });
+                    const uniqueValuesAligned = distLabels.map(label => uniqueGroupCounts[label] || 0);
 
-                    if (uniqueUsersChartInstance) uniqueUsersChartInstance.destroy();
-                    const ctx4 = document.getElementById('uniqueUsersChart').getContext('2d');
-                    uniqueUsersChartInstance = new Chart(ctx4, {
+                    if (compareChartInstance) compareChartInstance.destroy();
+                    const ctxCompare = document.getElementById('compareChart').getContext('2d');
+                    
+                    compareChartInstance = new Chart(ctxCompare, {
                         type: 'bar',
                         data: {
-                            labels: uniqueLabels,
-                            datasets: [{ label: ' จำนวนคน', data: uniqueValues, backgroundColor: uniqueColors, borderRadius: 4 }]
+                            labels: distLabels,
+                            datasets: [
+                                { 
+                                    label: ' ความถี่ (ครั้ง)', 
+                                    data: distValues, 
+                                    backgroundColor: '#3b82f6', 
+                                    borderRadius: 4 
+                                },
+                                { 
+                                    label: ' ผู้ใช้งาน (คน)', 
+                                    data: uniqueValuesAligned, 
+                                    backgroundColor: '#10b981', 
+                                    borderRadius: 4 
+                                }
+                            ]
                         },
                         options: {
-                            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                            plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', bodyFont: {family: 'Sarabun', size: 14} } },
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { 
+                                legend: { 
+                                    display: true, 
+                                    position: 'top', 
+                                    labels: { font: {family: 'Sarabun', size: 14} } 
+                                }, 
+                                tooltip: { 
+                                    backgroundColor: 'rgba(15, 23, 42, 0.9)', 
+                                    titleFont: {family: 'Sarabun'},
+                                    bodyFont: {family: 'Sarabun', size: 14} 
+                                } 
+                            },
                             scales: {
-                                x: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { stepSize: 1, font: {family: 'Sarabun'} } },
                                 y: { 
+                                    beginAtZero: true, 
+                                    grid: { color: '#f1f5f9' }, 
+                                    ticks: { font: {family: 'Sarabun'}, stepSize: 1 } 
+                                },
+                                x: { 
                                     grid: { display: false }, 
-                                    ticks: { font: {family: 'Sarabun'}, callback: function(val, index) { return truncateLabel(this.getLabelForValue(val)); } } 
+                                    ticks: { 
+                                        font: {family: 'Sarabun'}, 
+                                        callback: function(val) { return truncateLabel(this.getLabelForValue(val), 15); } 
+                                    } 
                                 }
                             }
                         }
@@ -704,11 +861,22 @@ def show_dashboard_graph():
 
                     const avgGroups = Object.keys(sumTime).sort((a, b) => (sumTime[b] / countTime[b]) - (sumTime[a] / countTime[a]));
 
-                    // คำนวณหาค่าเฉลี่ยชั่วโมงของแต่ละกลุ่ม
+                    const avgCanvas = document.getElementById('avgTimeChart');
+                    const avgEmptyState = document.getElementById('avgTimeEmptyState');
+
+                    if (avgGroups.length === 0) {
+                        if (avgTimeChartInstance) { avgTimeChartInstance.destroy(); avgTimeChartInstance = null; }
+                        avgCanvas.classList.add('hidden');
+                        avgEmptyState.classList.remove('hidden');
+                        document.getElementById('avgTimeSubtitle').innerText = 'คำนวณจากระยะเวลาที่ใช้งานในแต่ละวัน';
+                        return;
+                    }
+                    avgCanvas.classList.remove('hidden');
+                    avgEmptyState.classList.add('hidden');
+
                     const rawAvgHours = avgGroups.map(grp => sumTime[grp] / countTime[grp]);
                     const maxAvgHours = Math.max(...rawAvgHours, 0);
 
-                    // Dynamic Unit Logic: ถ้าเวลารวมสูงสุดน้อยกว่า 1 ชั่วโมง จะปรับหน่วยเป็น "นาที" อัตโนมัติ
                     const useMinutes = maxAvgHours > 0 && maxAvgHours < 1;
                     const timeUnitStr = useMinutes ? "นาที" : "ชั่วโมง";
 
@@ -800,4 +968,4 @@ def show_dashboard_graph():
 
     except Exception as e:
         log(f"❌ Graph Error: {e}")
-        messagebox.showerror("ข้อผิดพลาด", f"ไม่สามารถสร้างแดชบอร์ดได้: {e}")
+        messagebox.showerror("ข้อผิดพลาด", f"ไม่สามารถสร้างแดชบอร์ดสถิติได้: {e}")
