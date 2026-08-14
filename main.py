@@ -120,7 +120,7 @@ def setup_admin_gui(root):
     lbl_admin.pack(pady=(20, 15))
 
     lbl_crud_hint = tk.Label(
-        admin_window, text="แดชบอร์ด", font=("Arial", 15), fg="#bdc3c7", bg="#34495e"
+        admin_window, text="แดชบอร์ดสถิติการเข้าใช้งาน", font=("Arial", 15), fg="#bdc3c7", bg="#34495e"
     )
     lbl_crud_hint.pack(pady=(15, 0))
 
@@ -154,13 +154,13 @@ def setup_admin_gui(root):
     btn_import.pack(pady=10, fill=tk.X, padx=40)
 
     lbl_crud_hint = tk.Label(
-        admin_window, text="นำเข้าประวัติการเข้าใช้งาน (Attendance Logs) CSV ไฟล์เท่านั้น", font=("Arial", 15), fg="#bdc3c7", bg="#34495e"
+        admin_window, text="นำเข้าประวัติการเข้าใช้งาน CSV ไฟล์เท่านั้น(ใช่เพื่อทดสอบเท่านั้น)", font=("Arial", 15), fg="#bdc3c7", bg="#34495e"
     )
     lbl_crud_hint.pack(pady=(15, 0))
 
     btn_import_attendance = tk.Button(
         admin_window,
-        text="นำเข้า Attendance Logs (CSV)",
+        text="นำเข้าประวัติการเข้าใช้งาน (CSV)",
         font=("Arial", 18, "bold"),
         bg="#8e44ad",
         fg="white",
