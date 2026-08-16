@@ -4,11 +4,23 @@ import 'pages/login_page.dart';
 // นำเข้าไลบรารี Firebase Core เพื่อเริ่มต้นใช้งาน Firebase
 import 'package:firebase_core/firebase_core.dart';
 
+// นำเข้า FirestoreService
+import '../services/firestore_service.dart';
+
 // นำเข้าไลบรารี Flutter Secure Storage เพื่ออ่านข้อมูลที่จัดเก็บในเครื่อง
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // นำเข้าหน้า BleAdvertisePage
 import '../pages/bleadvertise_page.dart';
+
+// นำเข้า GenerateKeyService สำหรับการสร้างคีย์
+import '../services/generatekey_service.dart';
+
+// นำเข้า NetworkCheckService สำหรับตรวจสอบการเชื่อมต่ออินเทอร์เน็ต
+import '../services/networkcheck_service.dart';
+
+// นำเข้า LogdebugService
+import '../services/logdebug_service.dart';
 
 /*
 - async เริ่มต้นการทำงานของ funtion ที่เรียกใช้ใน main
@@ -28,9 +40,19 @@ void main() async {
   // เริ่มต้นการทำงานของ Firebase (เชื่อมต่อกับโปรเจกต์)
   await Firebase.initializeApp();
 
+  // สร้าง Instance ของ FirestoreService เพื่อใช้งาน
+  final FirestoreService firestoreService = FirestoreService();
+
   // ตรวจสอบว่ามี student_id อยู่ในเครื่องหรือไม่
   String? studentIDCheck = await storage.read(key: 'student_id');
+  bool hasNet = await NetworkService.onConnectivityChanged.first;
 
+  if (studentIDCheck != null && hasNet) {
+    log('Random new key...');
+    String newKey = generateKey(8, "key");
+    await storage.write(key: 'my_secret_key', value: newKey);
+    await FirestoreService().updateUser(studentIDCheck, {'key': newKey});
+  }
   // รันแอปพลิเคชัน
   runApp(MyApp(startPage: studentIDCheck));
 }
