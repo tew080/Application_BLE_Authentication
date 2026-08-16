@@ -49,6 +49,11 @@ dependencies:
   # Add icon app
   flutter_launcher_icons: ^0.13.1
 
+  # Add internet connection checker
+  # ใช้สำหรับตรวจสอบการเชื่อมต่ออินเทอร์เน็ต
+  connectivity_plus: ^6.0.3
+  internet_connection_checker_plus: ^2.5.0
+
 # Add icon app
 flutter_launcher_icons:
   android: "launcher_icon"
