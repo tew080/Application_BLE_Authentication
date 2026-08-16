@@ -14,6 +14,8 @@ import '../services/logdebug_service.dart';
 import '../services/generatekey_service.dart';
 // นำเข้าไลบรารี Flutter Secure Storage เพื่ออ่านหรือจัดเก็บข้อมูลในเครื่อง
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+// นำเข้า NetworkCheckService สำหรับตรวจสอบการเชื่อมต่ออินเทอร์เน็ต
+import '../services/networkcheck_service.dart';
 
 class AdvertisePage extends StatefulWidget {
   // รับรหัสนักศึกษาเข้ามา
@@ -40,6 +42,10 @@ class _AdvertisePageState extends State<AdvertisePage> {
   static const Duration _burstOn = Duration(seconds: 5);
   // เวลาพักสัญญาณ (4 วินาที)
   static const Duration _burstOff = Duration(seconds: 4);
+  // ตัวแปรเช็คสถานะ Checkinout จาก Firestore
+  bool checkinoutStatus = false;
+  // ตัวจัดการการดักฟังข้อมูล Firestore
+  StreamSubscription? _userSubscription;
 
   // สร้าง FlutterSecureStorage เพื่ออ่านข้อมูลที่จัดเก็บในเครื่อง
   static const storage = FlutterSecureStorage(
@@ -101,40 +107,105 @@ class _AdvertisePageState extends State<AdvertisePage> {
 
   // เริ่มส่งสัญญาณแบบ Burst Mode (เปิด-ปิด สลับกัน)
   Future<void> startBurstAdvertising(String key) async {
-    log("**** StartBurstAdvertising ****");
+    bool hasNet = await NetworkService.onConnectivityChanged.first;
+    // 1. ตรวจสอบการอัปเดตแบบ Real-time จาก Firestore
+    _userSubscription = FirestoreService()
+        .getUserStream(widget.studentId)
+        .listen((snapshot) async {
+      
+      // ตรวจสอบว่ามีเอกสารอยู่จริงและแปลง (Cast) ข้อมูลให้เป็น Map
+      if (snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>?;
+        checkinoutStatus = data?['checkinoutStatus'];
+      }
+    });
 
-    // ยกเลิก Timer ตัวเก่าก่อน (ป้องกันการทำงานซ้อน)
-    _bleRefreshTimer?.cancel();
-    log("StopRefreshTimer");
+    if(!hasNet) {
+      log("**** StartBurstAdvertising ****");
+      log("ไม่มีการเชื่อมต่ออินเทอร์เน็ตอยู่");
 
-    // สั่งเริ่มส่งสัญญาณครั้งแรกทันที
-    await BleService.startAdvertising(key);
-    log("Auto StartAdvertising");
+      // ยกเลิก Timer ตัวเก่าก่อน (ป้องกันการทำงานซ้อน)
+      _bleRefreshTimer?.cancel();
+      log("StopRefreshTimer");
 
-    // อัปเดตสถานะ UI
-    if (mounted) {
-      setState(() {
-        advertising = true;
+      // สั่งเริ่มส่งสัญญาณครั้งแรกทันที
+      await BleService.startAdvertising(key);
+      log("Auto StartAdvertising");
+
+      // อัปเดตสถานะ UI
+      if (mounted) {
+        setState(() {
+          advertising = true;
+        });
+      }
+      log("State Advertising: $advertising");
+
+      // ตั้ง Timer ให้ทำงานวนลูป
+      _bleRefreshTimer = Timer.periodic(_burstOn + _burstOff, (timer) async {
+        log("[DEBUG] Reset BLE: $timer");
+
+        // สั่งเริ่มส่ง
+        await BleService.startAdvertising(key);
+        log("Start Advertising");
+
+        // รอเวลาพัก
+        await Future.delayed(_burstOff);
+        log("Delayed: $_burstOff");
+
+        // สั่งหยุดส่ง
+        await BleService.stopAdvertising();
+        log("Stop Advertising");
+      });
+    } else if (hasNet) {
+      log("**** StartBurstAdvertising ****");
+      log("มีการเชื่อมต่ออินเทอร์เน็ตอยู่");
+
+      // ยกเลิก Timer ตัวเก่าก่อน (ป้องกันการทำงานซ้อน)
+      _bleRefreshTimer?.cancel();
+      log("StopRefreshTimer");
+
+      // สั่งเริ่มส่งสัญญาณครั้งแรกทันที
+      await BleService.startAdvertising(key);
+      log("Auto StartAdvertising");
+
+      // อัปเดตสถานะ UI
+      if (mounted) {
+        setState(() {
+          advertising = true;
+        });
+      }
+      log("State Advertising: $advertising");
+
+      // ตั้ง Timer ให้ทำงานวนลูป
+      _bleRefreshTimer = Timer.periodic(_burstOn + _burstOff, (timer) async {
+        log("[DEBUG] Reset BLE: $timer");
+
+        _userSubscription;
+
+        log("CheckinoutStatus: $checkinoutStatus");
+        if (checkinoutStatus == true) {
+          log("User is checked in, stopping advertising.");
+          await stop();
+        }
+
+        // สั่งเริ่มส่ง
+        await BleService.startAdvertising(key);
+        log("Start Advertising");
+
+        // รอเวลาพัก
+        await Future.delayed(_burstOff);
+        log("Delayed: $_burstOff");
+
+        // สั่งหยุดส่ง
+        //await BleService.stopAdvertising();
+        //log("Stop Advertising");
+        log("CheckinoutStatus: $checkinoutStatus");
+        if (checkinoutStatus == true) {
+          log("User is checked in, stopping advertising.");
+          await stop();
+        }
       });
     }
-    log("State Advertising: $advertising");
-
-    // ตั้ง Timer ให้ทำงานวนลูป
-    _bleRefreshTimer = Timer.periodic(_burstOn + _burstOff, (timer) async {
-      log("[DEBUG] Reset BLE: $timer");
-
-      // สั่งเริ่มส่ง
-      await BleService.startAdvertising(key);
-      log("Start Advertising");
-
-      // รอเวลาพัก
-      await Future.delayed(_burstOff);
-      log("Delayed: $_burstOff");
-
-      // สั่งหยุดส่ง
-      await BleService.stopAdvertising();
-      log("Stop Advertising");
-    });
   }
 
   // ฟังก์ชันหยุดการทำงาน (Manual Stop)
@@ -147,6 +218,12 @@ class _AdvertisePageState extends State<AdvertisePage> {
     await BleService.stopAdvertising();
     log("Stop Advertising");
 
+    await FirestoreService().updateUser(widget.studentId, {
+      'checkinoutStatus': false
+    });
+
+    _userSubscription?.cancel();
+
     // อัปเดตสถานะ UI
     if (mounted) {
       setState(() {
@@ -158,12 +235,14 @@ class _AdvertisePageState extends State<AdvertisePage> {
 
   Future<void> logout() async {
     _bleRefreshTimer?.cancel();
+    _userSubscription?.cancel();
     // หยุดส่งสัญญาณ Bluetooth ทันที (สำคัญมาก)
     await BleService.stopAdvertising();
     log("Stop Advertising");
 
     await FirestoreService().updateUser(widget.studentId, {
       'loginStatus': false,
+      'checkinoutStatus': false,
     });
 
     // ลบข้อมูลทั้งหมดใน FlutterSecureStorage
@@ -183,6 +262,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
     // คืนทรัพยากรเมื่อปิดหน้านี้
     // ป้องกัน Memory Leak แต่สำหรับการ Logout จะจัดการใน func logout() อีกที
     _bleRefreshTimer?.cancel();
+    _userSubscription?.cancel();
     BleService.stopAdvertising();
     super.dispose();
   }
