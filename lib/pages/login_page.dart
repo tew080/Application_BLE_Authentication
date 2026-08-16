@@ -484,7 +484,7 @@ class _LoginPageState extends State<LoginPage> {
                     _isOtpSent
                         ? 'ยืนยัน OTP เพื่อเข้าสู่ระบบ'
                         : 'เลือกอีเมลในเครื่องเพื่อรับOTP',
-                    style: const TextStyle(fontSize: 16),
+                    style: const TextStyle(fontSize: 15),
                   ),
                   onPressed: loading
                       ? null
@@ -524,7 +524,7 @@ class _LoginPageState extends State<LoginPage> {
                     _isOtpSent
                         ? 'ยืนยัน OTP เพื่อเข้าสู่ระบบ'
                         : 'ผูกหรือเปลี่ยนอีเมล',
-                    style: const TextStyle(fontSize: 16),
+                    style: const TextStyle(fontSize: 15),
                   ),
                   onPressed: loading
                       ? null
