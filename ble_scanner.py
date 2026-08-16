@@ -49,6 +49,17 @@ async def activate_door_unlock(device, hex_key, user_info):
 
     shared_state.gui_light_state = "green"
 
+    # เซ็ต checkinoutStatus เป็น True บน Firebase ---
+    try:
+        if shared_state.db is not None:
+            # อัปเดตข้อมูลผู้ใช้งานตาม doc_id
+            shared_state.db.collection(Config.COLLECTION_STUDENT).document(doc_id).update({
+                "checkinoutStatus": True
+            })
+            log(f"- อัปเดต checkinoutStatus เป็น True สำหรับ: {full_name}")
+    except Exception as e:
+        log(f"ไม่สามารถอัปเดต checkinoutStatus ได้: {e}")
+
     asyncio.create_task(asyncio.to_thread(sync_record_attendance, doc_id))
     await asyncio.sleep(Config.UNLOCK_DELAY)
 
