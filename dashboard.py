@@ -1,3 +1,4 @@
+# dashboard.py
 import os
 import json
 import webbrowser
@@ -9,67 +10,78 @@ from config import Config
 import shared_state
 from logger import log
 
-def update_dashboard_data_file():
-    """ ดึงข้อมูลจาก Firebase มาเซฟเป็นไฟล์ JS เพื่อให้หน้าเว็บดึงไปโชว์แบบ Real-time """
-    if shared_state.db is None:
+# 🔥 IN-MEMORY CACHE FOR FIRESTORE READ QUOTA PROTECTION 🔥
+_raw_events_cache = []
+_last_fetch_timestamp = None
+CACHE_EXPIRATION_MINUTES = 10  # ป้องกันการอ่าน Firestore บ่อยเกินไป (อ่านสูงสุดไม่เกิน 1 ครั้งทุกๆ 10 นาที)
+
+def update_dashboard_data_file(new_event=None, force_refresh=False):
+    """
+    อัปเดตไฟล์ JS แดชบอร์ดแบบประหยัด Firestore Read Limit
+    - หากมี new_event เข้ามา จะ append เข้า local cache ทันที โดยใช้ 0 Firestore Reads!
+    - ดึงข้อมูลจาก Firestore เฉพาะครั้งแรก หรือเมื่อแคชหมดอายุ (10 นาที)
+    """
+    global _raw_events_cache, _last_fetch_timestamp
+    if shared_state.db is None and not _raw_events_cache:
         return
 
     with shared_state.dashboard_data_lock:
         try:
             today_date = datetime.now().strftime("%Y-%m-%d")
-            
-            # --- 1. จำกัดช่วงเวลาการดึงข้อมูลเพื่อลดภาระเครื่อง (30 วันย้อนหลัง) ---
             past_date_limit = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
 
-            # 2. ดึงข้อมูลรายชื่อนักศึกษาล่วงหน้าเพื่อใช้ทำ Mapping ชื่อ-นามสกุล
-            student_info_map = {}
-            try:
-                students_ref = shared_state.db.collection(Config.COLLECTION_STUDENT).stream()
-                for doc in students_ref:
-                    sd = doc.to_dict()
-                    sid = sd.get("student_id", doc.id)
-                    student_info_map[sid] = {
-                        "first_name": sd.get("first_name", "ไม่ระบุ"),
-                        "last_name": sd.get("last_name", "")
-                    }
-            except Exception as ex:
-                log(f"⚠️ ไม่สามารถดึงรายชื่อนักศึกษาล่วงหน้าได้ : {ex}")
+            now_ts = datetime.now()
+            needs_db_fetch = force_refresh or (_last_fetch_timestamp is None) or \
+                             ((now_ts - _last_fetch_timestamp).total_seconds() > CACHE_EXPIRATION_MINUTES * 60)
 
-            # 3. ดึงข้อมูล logs เฉพาะช่วงเวลาที่กำหนด
-            logs_ref = shared_state.db.collection("attendance_logs")\
-                .where(filter=FieldFilter("date", ">=", past_date_limit))\
-                .stream()
+            # --- 1. บริหารจัดการ Local Events Cache ---
+            if new_event is not None and _raw_events_cache:
+                # มีสแกนใหม่ -> เพิ่มเข้า Local Cache โดยตรง (0 Firestore Reads!)
+                _raw_events_cache.append(new_event)
+            elif needs_db_fetch and shared_state.db is not None:
+                # ดึงจาก Firestore เฉพาะช่วงเวลาที่กำหนด
+                logs_ref = shared_state.db.collection(Config.COLLECTION_ATTENDANCE)\
+                    .where(filter=FieldFilter("date", ">=", past_date_limit))\
+                    .stream()
                 
-            raw_events = []
+                fetched_events = []
+                for doc in logs_ref:
+                    d = doc.to_dict()
+                    s_id = d.get("student_id", "")
+                    if not s_id:
+                        continue
+
+                    # Lookup จาก memory valid_keys
+                    student_info = next((v for v in shared_state.valid_keys.values() if v.get("doc_id") == s_id or v.get("student_id") == s_id), {})
+
+                    fetched_events.append({
+                        "student_id": s_id,
+                        "first_name": d.get("first_name") or student_info.get("first_name", "ไม่ระบุ"),
+                        "last_name": d.get("last_name") or student_info.get("last_name", ""),
+                        "action": d.get("action", ""),
+                        "date": d.get("date", ""),
+                        "time": d.get("time", "00:00:00"),
+                        "faculty": d.get("faculty") or student_info.get("faculty", "ไม่ระบุ"),
+                        "branch": d.get("branch") or student_info.get("branch", "ไม่ระบุ")
+                    })
+                _raw_events_cache = fetched_events
+                _last_fetch_timestamp = now_ts
+                log(f"⚡ [Cache Updated] Loaded {len(_raw_events_cache)} logs from Firestore.")
+
+            # --- 2. แปลงข้อมูลเป็น raw_events และ all_logs ---
+            raw_events = _raw_events_cache
             all_logs = []
             latest_clock_in = {}
 
-            for doc in logs_ref:
-                d = doc.to_dict()
-                action = d.get("action", "")
-                s_id = d.get("student_id", "")
-                d_date = d.get("date", "")
-                d_time = d.get("time", "00:00:00")
-                faculty = d.get("faculty", "ไม่ระบุ") if d.get("faculty") else "ไม่ระบุ"
-                branch = d.get("branch", "ไม่ระบุ") if d.get("branch") else "ไม่ระบุ"
-
-                if not s_id:
-                    continue
-
-                # ดึงชื่อ-นามสกุลจาก Log หรือใช้จาก Student Map
-                first_name = d.get("first_name") or student_info_map.get(s_id, {}).get("first_name", "ไม่ระบุ")
-                last_name = d.get("last_name") or student_info_map.get(s_id, {}).get("last_name", "")
-
-                raw_events.append({
-                    "student_id": s_id,
-                    "first_name": first_name,
-                    "last_name": last_name,
-                    "action": action,
-                    "date": d_date,
-                    "time": d_time,
-                    "faculty": faculty,
-                    "branch": branch
-                })
+            for ev in raw_events:
+                action = ev.get("action", "")
+                s_id = ev.get("student_id", "")
+                d_date = ev.get("date", "")
+                d_time = ev.get("time", "00:00:00")
+                faculty = ev.get("faculty", "ไม่ระบุ")
+                branch = ev.get("branch", "ไม่ระบุ")
+                first_name = ev.get("first_name", "ไม่ระบุ")
+                last_name = ev.get("last_name", "")
 
                 if action == "Clock-IN":
                     all_logs.append({
@@ -85,6 +97,7 @@ def update_dashboard_data_file():
                         if s_id not in latest_clock_in or d_time > latest_clock_in.get(s_id, ""):
                             latest_clock_in[s_id] = d_time
 
+            # --- 3. คำนวณ session_data ---
             events_by_user_date = {}
             for ev in raw_events:
                 key = (ev["student_id"], ev["date"])
@@ -100,8 +113,8 @@ def update_dashboard_data_file():
                 total_hours_today = 0.0
                 in_time = None
 
-                faculty = next((e["faculty"] for e in reversed(events) if e["faculty"] != "ไม่ระบุ"), "ไม่ระบุ")
-                branch = next((e["branch"] for e in reversed(events) if e["branch"] != "ไม่ระบุ"), "ไม่ระบุ")
+                faculty = next((e["faculty"] for e in reversed(events) if e.get("faculty") and e["faculty"] != "ไม่ระบุ"), "ไม่ระบุ")
+                branch = next((e["branch"] for e in reversed(events) if e.get("branch") and e["branch"] != "ไม่ระบุ"), "ไม่ระบุ")
                 first_name = next((e["first_name"] for e in reversed(events) if e.get("first_name")), "ไม่ระบุ")
                 last_name = next((e["last_name"] for e in reversed(events) if e.get("last_name")), "")
 
@@ -132,27 +145,24 @@ def update_dashboard_data_file():
                         "total_hours": total_hours_today
                     })
 
-            inside_query = shared_state.db.collection(Config.COLLECTION_STUDENT)\
-                .where(filter=FieldFilter("last_status", "==", "Clock-IN"))\
-                .stream()
-
+            # --- 4. ดึงผู้ใช้งานที่อยู่ในพื้นที่ขณะนี้จาก shared_state.valid_keys (0 Reads!) ---
             inside_list = []
-            for doc in inside_query:
-                d = doc.to_dict()
-                if d.get("last_update_date") == today_date:
-                    student_id = d.get("student_id", doc.id)
-                    time_in = d.get("last_update_time", d.get("time", ""))
+            for k, info in shared_state.valid_keys.items():
+                if info.get("last_status") == "Clock-IN" and info.get("last_update_date") == today_date:
+                    sid = info.get("student_id") or info.get("doc_id", "")
+                    time_in = info.get("last_update_time", "")
                     if not time_in or time_in == "-":
-                        time_in = latest_clock_in.get(student_id, "-")
+                        time_in = latest_clock_in.get(sid, "-")
 
                     inside_list.append({
-                        "first_name": d.get("first_name", "ไม่ระบุ"),
-                        "last_name": d.get("last_name", ""),
-                        "faculty": d.get("faculty", "ไม่ระบุ") if d.get("faculty") else "ไม่ระบุ",
-                        "branch": d.get("branch", "ไม่ระบุ") if d.get("branch") else "ไม่ระบุ",
+                        "first_name": info.get("first_name", "ไม่ระบุ"),
+                        "last_name": info.get("last_name", ""),
+                        "faculty": info.get("faculty", "ไม่ระบุ"),
+                        "branch": info.get("branch", "ไม่ระบุ"),
                         "time_in": time_in
                     })
 
+            # --- 5. สร้างไฟล์ dashboard_data.js ---
             js_content = f"window.rawData = {json.dumps(all_logs)};\nwindow.insideData = {json.dumps(inside_list)};\nwindow.sessionData = {json.dumps(session_data)};"
             file_path = os.path.join(os.getcwd(), Config.DASHBOARD_DIR_JS)
 
@@ -169,8 +179,8 @@ def show_dashboard_graph():
         return
 
     try:
-        log("- กำลังเตรียมแดชบอร์ดระดับพรีเมียม...")
-        update_dashboard_data_file()
+        log("- กำลังเตรียมแดชบอร์ดสถิติระดับพรีเมียม...")
+        update_dashboard_data_file(force_refresh=True)
 
         html_content = """
         <!DOCTYPE html>
