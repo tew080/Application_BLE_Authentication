@@ -46,6 +46,12 @@ class _AdvertisePageState extends State<AdvertisePage> {
   bool checkinoutStatus = false;
   // ตัวจัดการการดักฟังข้อมูล Firestore
   StreamSubscription? _userSubscription;
+  // สร้าง Instance ของ FirestoreService เพื่อใช้งาน
+  final FirestoreService firestoreService = FirestoreService();
+  // ตัวแปรเก็บชื่อผู้ใช้
+  String userName = "";
+  // ตัวแปรเก็บสถานะผู้ใช้
+  String userStatus = "";
 
   // สร้าง FlutterSecureStorage เพื่ออ่านข้อมูลที่จัดเก็บในเครื่อง
   static const storage = FlutterSecureStorage(
@@ -55,6 +61,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
 
   @override
   void initState() {
+    _getUserInfo();
     super.initState();
     // ดักฟัง Callback จาก Native เมื่อเริ่มส่งสัญญาณสำเร็จ
     BleService.listenAdvertisingStarted(() {
@@ -66,6 +73,19 @@ class _AdvertisePageState extends State<AdvertisePage> {
       }
     });
     _generateBleKey();
+  }
+
+  Future<void> _getUserInfo() async {
+    final userInfo = await firestoreService.getUser(widget.studentId);
+      userName = userInfo['first_name'].toString() + " " + userInfo['last_name'].toString();
+      userStatus = userInfo['last_status'].toString();
+      if (userStatus == "Clock-IN") {
+        userStatus = "กำลังเข้าใช้บริการ";
+      } else if (userStatus == "Clock-OUT") {
+        userStatus = "ไม่ได้เข้าใช้บริการ";
+      } else {
+        userStatus = "ไม่ทราบสถานะ";
+      }
   }
 
   Future<void> _generateBleKey() async {
@@ -264,7 +284,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Student ID: ${widget.studentId}'),
+        title: Text('สวัสดีคุณ: $userName'),
         actions: [
           // ปุ่ม Logout มุมขวาบน
           IconButton(
@@ -322,7 +342,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
               const SizedBox(height: 20),
               // แสดง Key
               Text(
-                'กำลังส่งสัญญาณ\nคีย์: $currentKey',
+                'กำลังส่งสัญญาณ\nคีย์: $currentKey\nสถานะ: $userStatus',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 18, color: Colors.green),
               ),
@@ -336,7 +356,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
               ),
               const SizedBox(height: 20),
               Text(
-                'ยังไม่เริ่มทำงาน\nคีย์: $currentKey',
+                'ยังไม่เริ่มทำงาน\nคีย์: $currentKey\nสถานะ: $userStatus',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 18),
               ),
