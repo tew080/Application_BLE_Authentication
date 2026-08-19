@@ -31,14 +31,14 @@ async def activate_door_unlock(device, hex_key, user_info):
     shared_state.is_processing = True
 
     doc_id = user_info["doc_id"]
-    full_name = f"{user_info['first_name']} {user_info['last_name']}".strip()
+    full_name = f"คุณ {user_info['first_name']} {user_info['last_name']}".strip()
 
     today_date = datetime.now().strftime("%Y-%m-%d")
-    if user_info["last_update_date"] != today_date:
+    if user_info.get("last_update_date") != today_date:
         show_status = "Clock-IN"
     else:
         show_status = (
-            "Clock-IN" if user_info["last_status"] == "Clock-OUT" else "Clock-OUT"
+            "Clock-IN" if user_info.get("last_status") == "Clock-OUT" else "Clock-OUT"
         )
 
     shared_state.gui_user_name = full_name
@@ -49,17 +49,8 @@ async def activate_door_unlock(device, hex_key, user_info):
 
     shared_state.gui_light_state = "green"
 
-    # เซ็ต checkinoutStatus เป็น True บน Firebase ---
-    try:
-        if shared_state.db is not None:
-            # อัปเดตข้อมูลผู้ใช้งานตาม doc_id
-            shared_state.db.collection(Config.COLLECTION_STUDENT).document(doc_id).update({
-                "checkinoutStatus": True
-            })
-            log(f"- อัปเดต checkinoutStatus เป็น True สำหรับ: {full_name}")
-    except Exception as e:
-        log(f"ไม่สามารถอัปเดต checkinoutStatus ได้: {e}")
-
+    # 🔥 ปรับปรุง: การตั้งค่า checkinoutStatus = True ถูกรวมเข้าไปทำใน sync_record_attendance 
+    # ทำให้ยุบเหลือ Firestore Write เพียงครั้งเดียว (ประหยัด Write Limit)
     asyncio.create_task(asyncio.to_thread(sync_record_attendance, doc_id))
     await asyncio.sleep(Config.UNLOCK_DELAY)
 
