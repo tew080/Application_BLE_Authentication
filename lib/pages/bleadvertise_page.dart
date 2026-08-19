@@ -108,25 +108,35 @@ class _AdvertisePageState extends State<AdvertisePage> {
   // เริ่มส่งสัญญาณแบบ Burst Mode (เปิด-ปิด สลับกัน)
   Future<void> startBurstAdvertising(String key) async {
     bool hasNet = await NetworkService.onConnectivityChanged.first;
-    // 1. ตรวจสอบการอัปเดตแบบ Real-time จาก Firestore
-    _userSubscription = FirestoreService()
-        .getUserStream(widget.studentId)
-        .listen((snapshot) async {
-      
-      // ตรวจสอบว่ามีเอกสารอยู่จริงและแปลง (Cast) ข้อมูลให้เป็น Map
-      if (snapshot.exists) {
-        final data = snapshot.data() as Map<String, dynamic>?;
-        checkinoutStatus = data?['checkinoutStatus'];
-      }
-    });
+    if (hasNet) {
+        log("มีการเชื่อมต่ออินเทอร์เน็ตอยู่ -> ตรวจสอบ CheckinoutStatus จาก Firestore");
+      // ยกเลิก Subscription เก่า (ถ้ามี) เพื่อป้องกันการฟังซ้ำ
+      _userSubscription?.cancel();
+      // ตรวจสอบการอัปเดตแบบ Real-time จาก Firestore
+      _userSubscription = FirestoreService()
+          .getUserStream(widget.studentId)
+          .listen((snapshot) async {
+        
+        // ตรวจสอบว่ามีเอกสารอยู่จริงและแปลง (Cast) ข้อมูลให้เป็น Map
+        if (snapshot.exists) {
+          final data = snapshot.data() as Map<String, dynamic>?;
+          checkinoutStatus = data?['checkinoutStatus'];
+
+          // สั่งหยุดส่งทันทีเมื่อเช็คอินแล้ว
+          if (checkinoutStatus == true) {
+            log("User checked in via Stream -> Stopping BLE immediately");
+            await stop();
+          }
+        }
+      });
+    }
+    // ยกเลิก Timer ตัวเก่าก่อน (ป้องกันการทำงานซ้อน)
+    _bleRefreshTimer?.cancel();
+    log("StopRefreshTimer");
 
     if(!hasNet) {
       log("**** StartBurstAdvertising ****");
       log("ไม่มีการเชื่อมต่ออินเทอร์เน็ตอยู่");
-
-      // ยกเลิก Timer ตัวเก่าก่อน (ป้องกันการทำงานซ้อน)
-      _bleRefreshTimer?.cancel();
-      log("StopRefreshTimer");
 
       // สั่งเริ่มส่งสัญญาณครั้งแรกทันที
       await BleService.startAdvertising(key);
@@ -160,10 +170,6 @@ class _AdvertisePageState extends State<AdvertisePage> {
       log("**** StartBurstAdvertising ****");
       log("มีการเชื่อมต่ออินเทอร์เน็ตอยู่");
 
-      // ยกเลิก Timer ตัวเก่าก่อน (ป้องกันการทำงานซ้อน)
-      _bleRefreshTimer?.cancel();
-      log("StopRefreshTimer");
-
       // สั่งเริ่มส่งสัญญาณครั้งแรกทันที
       await BleService.startAdvertising(key);
       log("Auto StartAdvertising");
@@ -178,15 +184,7 @@ class _AdvertisePageState extends State<AdvertisePage> {
 
       // ตั้ง Timer ให้ทำงานวนลูป
       _bleRefreshTimer = Timer.periodic(_burstOn + _burstOff, (timer) async {
-        log("[DEBUG] Reset BLE: $timer");
-
-        _userSubscription;
-
         log("CheckinoutStatus: $checkinoutStatus");
-        if (checkinoutStatus == true) {
-          log("User is checked in, stopping advertising.");
-          await stop();
-        }
 
         // สั่งเริ่มส่ง
         await BleService.startAdvertising(key);
@@ -199,11 +197,6 @@ class _AdvertisePageState extends State<AdvertisePage> {
         // สั่งหยุดส่ง
         //await BleService.stopAdvertising();
         //log("Stop Advertising");
-        log("CheckinoutStatus: $checkinoutStatus");
-        if (checkinoutStatus == true) {
-          log("User is checked in, stopping advertising.");
-          await stop();
-        }
       });
     }
   }
@@ -214,15 +207,15 @@ class _AdvertisePageState extends State<AdvertisePage> {
     _bleRefreshTimer?.cancel();
     log("Stop RefreshTimer");
 
-    // สั่งหยุด BLE
-    await BleService.stopAdvertising();
-    log("Stop Advertising");
-
     await FirestoreService().updateUser(widget.studentId, {
       'checkinoutStatus': false
     });
 
     _userSubscription?.cancel();
+
+    // สั่งหยุด BLE
+    await BleService.stopAdvertising();
+    log("Stop Advertising");
 
     // อัปเดตสถานะ UI
     if (mounted) {
