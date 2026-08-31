@@ -1,4 +1,3 @@
-# dashboard.py
 import os
 import json
 import webbrowser
@@ -28,7 +27,7 @@ def update_dashboard_data_file(new_event=None, force_refresh=False):
     with shared_state.dashboard_data_lock:
         try:
             today_date = datetime.now().strftime("%Y-%m-%d")
-            past_date_limit = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+            past_date_limit = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
 
             now_ts = datetime.now()
             needs_db_fetch = force_refresh or (_last_fetch_timestamp is None) or \
@@ -208,7 +207,7 @@ def show_dashboard_graph():
                     font-family: 'Sarabun', sans-serif; font-size: 14px; outline: none; transition: all 0.2s; background: #fff;
                 }
                 .form-select:focus, .form-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1); }
-                .form-input:disabled { background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
+                .form-select:disabled, .form-input:disabled { background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
                 .table-container::-webkit-scrollbar { width: 6px; height: 6px; }
                 .table-container::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
                 .fade-in { animation: fadeIn 0.4s ease-in-out; }
@@ -318,11 +317,11 @@ def show_dashboard_graph():
                             <!-- Card 4 -->
                             <div class="glass-card p-6 border-l-4 border-l-amber-500 flex flex-col justify-center h-full cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all duration-300"
                                  onclick="scrollToAndHighlight('topRankingsSection')">
-                                <div>
+                                <div id="kpi-top-group-container">
                                     <h3 class="text-slate-500 font-semibold text-sm mb-1" id="kpi-top-group-title">กลุ่มที่ใช้งานมากที่สุด</h3>
                                     <div class="text-lg font-bold text-slate-800 mt-1 break-words leading-tight" id="kpi-top-group">-</div>
+                                    <hr class="my-3 border-slate-100">
                                 </div>
-                                <hr class="my-3 border-slate-100">
                                 <div>
                                     <h3 class="text-slate-500 font-semibold text-sm mb-1">ช่วงเวลาหนาแน่นที่สุด</h3>
                                     <div class="text-lg font-bold text-slate-800 mt-1" id="kpi-peak-hour">-</div>
@@ -359,9 +358,14 @@ def show_dashboard_graph():
 
                         <!-- Charts Section 1 -->
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- High Performance Smooth Line Area Chart (Clean Daily View) -->
                             <div class="glass-card p-6 w-full" id="trendChartSection">
-                                <h2 class="text-base font-bold text-slate-700 mb-2">สถิติการเข้าใช้งานรายวัน</h2>
-                                <p class="text-xs text-slate-500 mb-4">เปรียบเทียบความถี่การเข้าใช้ (ครั้ง) และจำนวนผู้ใช้งานจริง (คน)</p>
+                                <div class="flex justify-between items-center mb-4">
+                                    <div>
+                                        <h2 class="text-base font-bold text-slate-700">แนวโน้มสถิติการเข้าใช้งาน</h2>
+                                        <p class="text-xs text-slate-500 mt-0.5">เปรียบเทียบความถี่การเข้าใช้ (ครั้ง) และจำนวนผู้ใช้งานจริง (คน) รายวัน</p>
+                                    </div>
+                                </div>
                                 <div class="relative h-72 w-full">
                                     <canvas id="trendChart"></canvas>
                                 </div>
@@ -460,6 +464,16 @@ def show_dashboard_graph():
                     return label.length > maxLength ? label.substring(0, maxLength) + '...' : label;
                 }
 
+                function formatDateLabel(dateStr) {
+                    if (!dateStr) return '-';
+                    const parts = dateStr.split('-');
+                    if (parts.length !== 3) return dateStr;
+                    const y = parseInt(parts[0], 10);
+                    const m = parseInt(parts[1], 10) - 1;
+                    const d = parseInt(parts[2], 10);
+                    return `${d} ${thaiMonths[m]} ${String(y + 543).slice(-2)}`;
+                }
+
                 // --- UI Elements ---
                 const facFilter = document.getElementById('facFilter');
                 const branchFilter = document.getElementById('branchFilter');
@@ -509,9 +523,23 @@ def show_dashboard_graph():
                     const rawData = window.rawData || [];
                     const selFac = facFilter.value || "คณะทั้งหมด";
 
-                    const faculties = ["คณะทั้งหมด", ...[...new Set(rawData.map(d => d.faculty))].sort()];
-                    facFilter.innerHTML = faculties.map(f => `<option value="${f}">${f}</option>`).join('');
-                    if (faculties.includes(selFac)) facFilter.value = selFac;
+                    const normalFaculties = [...new Set(rawData.map(d => d.faculty))]
+                        .filter(f => f && f !== "คณะทั้งหมด" && f !== "บุคคลภายนอก")
+                        .sort();
+
+                    let html = `<option value="คณะทั้งหมด">คณะทั้งหมด</option>`;
+                    normalFaculties.forEach(f => {
+                        html += `<option value="${f}">${f}</option>`;
+                    });
+
+                    html += `<option disabled class="text-slate-300">──────────</option>`;
+                    html += `<option value="บุคคลภายนอก" class="font-semibold">บุคคลภายนอก</option>`;
+
+                    facFilter.innerHTML = html;
+
+                    if ([...normalFaculties, "คณะทั้งหมด", "บุคคลภายนอก"].includes(selFac)) {
+                        facFilter.value = selFac;
+                    }
 
                     updateBranchList();
                 }
@@ -520,6 +548,15 @@ def show_dashboard_graph():
                     const rawData = window.rawData || [];
                     const selFac = facFilter.value;
                     const prevBranch = branchFilter.value;
+
+                    if (selFac === "บุคคลภายนอก") {
+                        branchFilter.innerHTML = `<option value="สาขาทั้งหมด">-</option>`;
+                        branchFilter.value = "สาขาทั้งหมด";
+                        branchFilter.disabled = true;
+                        return;
+                    }
+
+                    branchFilter.disabled = false;
 
                     let branches = ["สาขาทั้งหมด"];
                     if (selFac !== "คณะทั้งหมด") {
@@ -656,9 +693,15 @@ def show_dashboard_graph():
                     const groupBy = selFac === "คณะทั้งหมด" ? "faculty" : "branch";
                     currentFilteredLogs.forEach(d => groupCounts[d[groupBy]] = (groupCounts[d[groupBy]] || 0) + 1);
                     const sortedGroups = Object.entries(groupCounts).sort((a,b) => b[1] - a[1]);
-                    
-                    document.getElementById('kpi-top-group-title').innerText = selFac === "คณะทั้งหมด" ? "คณะที่เข้าใช้งานมากที่สุด" : "สาขาที่เข้าใช้งานมากที่สุด";
-                    document.getElementById('kpi-top-group').innerText = sortedGroups.length > 0 ? sortedGroups[0][0] : "ไม่มีข้อมูล";
+
+                    const kpiTopGroupContainer = document.getElementById('kpi-top-group-container');
+                    if (selFac === "บุคคลภายนอก") {
+                        if (kpiTopGroupContainer) kpiTopGroupContainer.classList.add('hidden');
+                    } else {
+                        if (kpiTopGroupContainer) kpiTopGroupContainer.classList.remove('hidden');
+                        document.getElementById('kpi-top-group-title').innerText = selFac === "คณะทั้งหมด" ? "คณะที่เข้าใช้งานมากที่สุด" : "สาขาที่เข้าใช้งานมากที่สุด";
+                        document.getElementById('kpi-top-group').innerText = sortedGroups.length > 0 ? sortedGroups[0][0] : "ไม่มีข้อมูล";
+                    }
 
                     // --- Render Top 5 Section ---
                     const top5Title = document.getElementById('top5Title');
@@ -674,6 +717,12 @@ def show_dashboard_graph():
                         top5Title.innerHTML = `<span>🏆</span> 5 อันดับนักศึกษาเข้าใช้งานสูงสุด (ระดับมหาวิทยาลัย)`;
                         top5Subtitle.innerText = `จัดอันดับจากความถี่การเข้าใช้งานทั้งหมด (ทุกคณะ)`;
                         top5GroupHeader.innerText = `คณะ`;
+                    } else if (selFac === "บุคคลภายนอก") {
+                        isFacultyView = true;
+                        logsForRanking = currentFilteredLogs; 
+                        top5Title.innerHTML = `<span>👤</span> 5 อันดับการเข้าใช้งานสูงสุด (บุคคลภายนอก)`;
+                        top5Subtitle.innerText = `จัดอันดับเฉพาะกลุ่มบุคคลภายนอก`;
+                        top5GroupHeader.innerText = `สังกัด/กลุ่ม`;
                     } else {
                         isFacultyView = true;
                         logsForRanking = currentFilteredLogs; 
@@ -715,64 +764,110 @@ def show_dashboard_graph():
                         }
                     }
 
-                    // --- Daily Trend Chart (เปรียบเทียบ ความถี่ vs จำนวนคน) ---
+                    // --- HIGH-PERFORMANCE HIGH-VOLUME TREND CHART ---
                     const trendSummary = {};
                     const dailyUsersMap = {};
 
                     currentFilteredLogs.forEach(row => {
-                        trendSummary[row.date] = (trendSummary[row.date] || 0) + 1;
-                        if (!dailyUsersMap[row.date]) {
-                            dailyUsersMap[row.date] = new Set();
+                        if (!row.date) return;
+                        const key = row.date;
+                        trendSummary[key] = (trendSummary[key] || 0) + 1;
+
+                        if (!dailyUsersMap[key]) {
+                            dailyUsersMap[key] = new Set();
                         }
-                        dailyUsersMap[row.date].add(row.student_id);
+                        dailyUsersMap[key].add(row.student_id);
                     });
 
-                    const sortedDates = Object.keys(trendSummary).sort();
-                    const trendLabels = sortedDates.map(d => {
-                        const dt = new Date(d);
-                        return dt.getDate() + ' ' + thaiMonths[dt.getMonth()];
-                    });
-                    const trendFreqValues = sortedDates.map(d => trendSummary[d]);
-                    const trendUserValues = sortedDates.map(d => dailyUsersMap[d] ? dailyUsersMap[d].size : 0);
+                    const sortedKeys = Object.keys(trendSummary).sort();
+                    const trendLabels = sortedKeys.map(k => formatDateLabel(k));
+                    const trendFreqValues = sortedKeys.map(k => trendSummary[k]);
+                    const trendUserValues = sortedKeys.map(k => dailyUsersMap[k] ? dailyUsersMap[k].size : 0);
 
                     if (trendChartInstance) trendChartInstance.destroy();
                     const ctx1 = document.getElementById('trendChart').getContext('2d');
+
+                    const gradFreq = ctx1.createLinearGradient(0, 0, 0, 280);
+                    gradFreq.addColorStop(0, 'rgba(99, 102, 241, 0.35)');
+                    gradFreq.addColorStop(1, 'rgba(99, 102, 241, 0.01)');
+
+                    const gradUser = ctx1.createLinearGradient(0, 0, 0, 280);
+                    gradUser.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
+                    gradUser.addColorStop(1, 'rgba(16, 185, 129, 0.01)');
+
+                    // คอนฟิกเพิ่มประสิทธิภาพการเรนเดอร์ข้อมูลปริมาณมาก (Big Data Optimization)
+                    const isLargeDataset = sortedKeys.length > 50;
+
                     trendChartInstance = new Chart(ctx1, {
-                        type: 'bar',
+                        type: 'line',
                         data: {
                             labels: trendLabels,
                             datasets: [
                                 { 
                                     label: ' ความถี่ (ครั้ง)', 
                                     data: trendFreqValues, 
-                                    backgroundColor: '#6366f1', 
-                                    borderRadius: 4 
+                                    borderColor: '#6366f1',
+                                    backgroundColor: gradFreq,
+                                    borderWidth: isLargeDataset ? 1.8 : 2.5,
+                                    tension: 0.3,
+                                    fill: true,
+                                    pointRadius: isLargeDataset ? 0 : 3,
+                                    pointHoverRadius: 6,
+                                    pointBackgroundColor: '#6366f1'
                                 },
                                 { 
                                     label: ' ผู้ใช้งาน (คน)', 
                                     data: trendUserValues, 
-                                    backgroundColor: '#10b981', 
-                                    borderRadius: 4 
+                                    borderColor: '#10b981',
+                                    backgroundColor: gradUser,
+                                    borderWidth: isLargeDataset ? 1.8 : 2.5,
+                                    tension: 0.3,
+                                    fill: true,
+                                    pointRadius: isLargeDataset ? 0 : 3,
+                                    pointHoverRadius: 6,
+                                    pointBackgroundColor: '#10b981'
                                 }
                             ]
                         },
                         options: {
-                            responsive: true, maintainAspectRatio: false,
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: isLargeDataset ? false : { duration: 400 },
+                            normalized: true,
+                            spanGaps: true,
+                            interaction: { mode: 'index', intersect: false },
                             plugins: { 
                                 legend: { 
                                     display: true, 
                                     position: 'top', 
-                                    labels: { font: {family: 'Sarabun', size: 12} } 
+                                    align: 'end',
+                                    labels: { font: {family: 'Sarabun', size: 12, weight: '600'}, usePointStyle: true, boxWidth: 8 } 
                                 }, 
                                 tooltip: { 
                                     backgroundColor: 'rgba(15, 23, 42, 0.9)', 
-                                    titleFont: {family: 'Sarabun'}, 
-                                    bodyFont: {family: 'Sarabun', size: 14} 
+                                    titleFont: {family: 'Sarabun', size: 13, weight: 'bold'}, 
+                                    bodyFont: {family: 'Sarabun', size: 12},
+                                    padding: 12,
+                                    cornerRadius: 8
                                 } 
                             },
                             scales: {
-                                y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { stepSize: 1, font: {family: 'Sarabun'} } },
-                                x: { grid: { display: false }, ticks: { font: {family: 'Sarabun'} } }
+                                y: { 
+                                    beginAtZero: true, 
+                                    grid: { color: '#f1f5f9' }, 
+                                    ticks: { precision: 0, font: {family: 'Sarabun'} } 
+                                },
+                                x: { 
+                                    grid: { display: false }, 
+                                    ticks: { 
+                                        font: {family: 'Sarabun', size: 11}, 
+                                        autoSkip: true, 
+                                        autoSkipPadding: 25, // 🔥 หัวใจสำคัญ: บังคับเว้นระยะห่างระหว่างข้อความขั้นต่ำ 25px (ป้องกันการซ้อนกัน 100%)
+                                        maxTicksLimit: 8,    // 🔥 ลดจำนวนการแสดงผลแกน X ให้ไม่เกิน 8 จุด
+                                        maxRotation: 45,     // 🔥 ปรับเอียงข้อความอัตโนมัติ 45 องศาเมื่อพื้นที่แคบ
+                                        minRotation: 0
+                                    } 
+                                }
                             }
                         }
                     });
@@ -780,7 +875,7 @@ def show_dashboard_graph():
                     // --- Combined Compare Chart (ความถี่ vs จำนวนคน ตามคณะ/สาขา) ---
                     document.getElementById('compareTitle').innerText = selFac === "คณะทั้งหมด" 
                         ? "เปรียบเทียบความถี่การเข้าใช้งาน (ครั้ง) และ จำนวนผู้ใช้งาน (คน) จำแนกตามคณะ" 
-                        : "เปรียบเทียบความถี่การเข้าใช้งาน (ครั้ง) และ จำนวนผู้ใช้งาน (คน) จำแนกตามสาขา";
+                        : (selFac === "บุคคลภายนอก" ? "เปรียบเทียบความถี่การเข้าใช้งานและผู้ใช้งาน (บุคคลภายนอก)" : "เปรียบเทียบความถี่การเข้าใช้งาน (ครั้ง) และ จำนวนผู้ใช้งาน (คน) จำแนกตามสาขา");
 
                     const distLabels = sortedGroups.map(g => g[0]);
                     const distValues = sortedGroups.map(g => g[1]);
@@ -902,7 +997,7 @@ def show_dashboard_graph():
 
                     document.getElementById('avgTimeTitle').innerText = selFac === "คณะทั้งหมด" 
                         ? `เวลาเฉลี่ยในการเข้าใช้พื้นที่ (${timeUnitStr}) จำแนกตามคณะ` 
-                        : `เวลาเฉลี่ยในการเข้าใช้พื้นที่ (${timeUnitStr}) จำแนกตามสาขา`;
+                        : (selFac === "บุคคลภายนอก" ? `เวลาเฉลี่ยในการเข้าใช้พื้นที่ (${timeUnitStr}) บุคคลภายนอก` : `เวลาเฉลี่ยในการเข้าใช้พื้นที่ (${timeUnitStr}) จำแนกตามสาขา`);
                     
                     document.getElementById('avgTimeSubtitle').innerText = useMinutes 
                         ? 'คำนวณและแปลงหน่วยเป็นนาทีอัตโนมัติเนื่องจากมีระยะเวลาน้อยกว่า 1 ชั่วโมง'

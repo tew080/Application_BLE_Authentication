@@ -8,6 +8,7 @@ import firebase_admin
 import requests
 from firebase_admin import credentials as fb_credentials
 from firebase_admin import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 import shared_state
 from config import Config
@@ -56,10 +57,8 @@ def fetch_ble_config():
 def on_snapshot_update(col_snapshot, changes, read_time):
     """
     ดึงข้อมูลและอัปเดต In-Memory เฉพาะ Document ที่มีการเปลี่ยนแปลง (Added, Modified, Removed)
-    ป้องกันการวนลูปอ่านข้อมูลทั้ง Collection ใหม่ทั้งหมด
     """
     try:
-        # ตรวจสอบและเตรียมตัวแปร valid_keys ใน shared_state ให้พร้อมใช้งาน
         if getattr(shared_state, 'valid_keys', None) is None:
             shared_state.valid_keys = {}
 
@@ -68,8 +67,14 @@ def on_snapshot_update(col_snapshot, changes, read_time):
             data = doc.to_dict()
             key = str(data.get(Config.FIELD_NAME, "")).strip()
 
-            # กรณีมีการเพิ่มข้อมูลใหม่ หรือแก้ไขข้อมูลเดิม
             if change.type.name in ['ADDED', 'MODIFIED']:
+                
+                # 🔥 [จุดที่ต้องแก้] 1. บังคับลบคีย์เก่าทั้งหมดของ user คนนี้ออกไปก่อนเสมอ ป้องกันข้อมูลค้าง
+                keys_to_delete = [k for k, v in shared_state.valid_keys.items() if v.get("doc_id") == doc.id]
+                for k in keys_to_delete:
+                    del shared_state.valid_keys[k]
+
+                # 2. ถ้ามีคีย์ใหม่ (สถานะกำลังล็อกอิน) ถึงจะนำกลับเข้าไปใหม่
                 if key:
                     shared_state.valid_keys[key] = {
                         "doc_id": doc.id,
@@ -84,9 +89,7 @@ def on_snapshot_update(col_snapshot, changes, read_time):
                         "last_update_time": data.get("last_update_time", ""),
                     }
                     
-            # กรณีข้อมูลถูกลบออกจาก Firestore
             elif change.type.name == 'REMOVED':
-                # หา key ที่ตรงกับ doc.id เพื่อลบออกจากหน่วยความจำ
                 keys_to_delete = [k for k, v in shared_state.valid_keys.items() if v.get("doc_id") == doc.id]
                 for k in keys_to_delete:
                     del shared_state.valid_keys[k]
@@ -422,3 +425,39 @@ def update_ble_connect_config(company_id, uuid_str):
         log(f"❌ Error updating BLE connect config: {e}")
         return False
     
+def add_external_person(prefix, first_name, last_name, email):
+    """ฟังก์ชันเพิ่มข้อมูลบุคคลภายนอกเข้าสู่ Firestore Collection 'student'"""
+    if shared_state.db is None:
+        return False, "ระบบยังไม่ได้เชื่อมต่อกับ Firebase"
+
+    try:
+        # นับจำนวนบุคคลภายนอกเดิมเพื่อสร้าง ID รันอัตโนมัติ (เช่น ep0001)
+        docs = shared_state.db.collection(Config.COLLECTION_STUDENT)\
+            .where(filter=FieldFilter("faculty", "==", "บุคคลภายนอก")).stream()
+        count = sum(1 for _ in docs)
+        new_id = f"ep{count + 1:04d}"
+
+        external_data = {
+            "student_id": new_id,
+            "prefix": prefix.strip(),
+            "first_name": first_name.strip(),
+            "last_name": last_name.strip(),
+            "email": email.strip(),
+            "faculty": "บุคคลภายนอก",
+            "branch": "",
+            Config.FIELD_NAME: "",  # คีย์ (key) ปล่อยว่างไว้
+            "loginStatus": False,
+            "last_status": "Clock-OUT",
+            "last_update_date": "",
+            "last_update_time": ""
+        }
+
+        # บันทึกลง Firestore โดยใช้ new_id เป็น Document ID
+        doc_ref = shared_state.db.collection(Config.COLLECTION_STUDENT).document(new_id)
+        doc_ref.set(external_data, merge=True)
+        
+        log(f"- เพิ่มข้อมูลบุคคลภายนอกสำเร็จ ID: {new_id}")
+        return True, new_id
+    except Exception as e:
+        log(f"❌ เกิดข้อผิดพลาดในการเพิ่มบุคคลภายนอก: {e}")
+        return False, str(e)
