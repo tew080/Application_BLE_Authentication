@@ -59,6 +59,8 @@ class _LoginPageState extends State<LoginPage> {
   String selectedEmailCheck = '';
   // เส้นทางอีเมลที่ต้องการตรวจสอบ (ในกรณีที่ต้องการใช้อีเมลของมหาวิทยาลัย)
   String targetEmail = '@student.sru.ac.th';
+
+  String targetID = 'ep';
   // รับค่าจาก รหัสนักศึกษาจาก TextField
   final studentIdCtrl = TextEditingController();
   // รับค่าจาก รหัสนักศึกษาจาก TextField
@@ -96,13 +98,15 @@ class _LoginPageState extends State<LoginPage> {
     selectedEmail = account.email;
 
     // ตรวจสอบว่าโดเมนของอีเมลตรงกับที่ต้องการหรือไม่
-    if (!selectedEmail.trim().toLowerCase().endsWith(targetEmail)) {
-      setState(() {
-        error = '*กรุณาใช้อีเมลของมหาวิทยาลัย (@student.sru.ac.th) เท่านั้น*';
-        loading = false;
-      });
-      await _googleSignIn.signOut();
-      return; // จบการทำงานทันทีถ้าโดเมนไม่ถูกต้อง
+    if (!studentId.trim().toLowerCase().startsWith(targetID)) {
+      if (!selectedEmail.trim().toLowerCase().endsWith(targetEmail)) {
+        setState(() {
+          error = '*กรุณาใช้อีเมลของมหาวิทยาลัย (@student.sru.ac.th) เท่านั้น*';
+          loading = false;
+        });
+        await _googleSignIn.signOut();
+        return; // จบการทำงานทันทีถ้าโดเมนไม่ถูกต้อง
+      }
     }
 
     selectedEmailCheck = userCheck['email'];
@@ -212,13 +216,14 @@ class _LoginPageState extends State<LoginPage> {
     // ดึงอีเมลที่ผู้ใช้เลือกจากข้อมูลบัญชี
     newSelectedEmail = account.email;
 
-    // ตรวจสอบว่าโดเมนของอีเมลตรงกับที่ต้องการหรือไม่
-    if (!newSelectedEmail.trim().toLowerCase().endsWith(targetEmail)) {
+    // ตรวจสอบว่ารหัสผู้ใช้งานขึ้นต้นด้วย 'ep' (บุคคลภายนอก) หรือไม่
+    if (!studentId.trim().toLowerCase().startsWith(targetID)) {
       setState(() {
-        error = '*กรุณาใช้อีเมลของมหาวิทยาลัย (@student.sru.ac.th) เท่านั้น*';
+        error = '*กรุณาใช้รหัสผู้ใช้งานสำหรับบุคคลภายนอก (เช่น epXXXXX) เท่านั้น*';
         loading = false;
       });
-      await _googleSignIn.signOut();
+      // หมายเหตุ: หากบุคคลภายนอกไม่ได้ล็อกอินผ่าน Google Sign-in สามารถลบบรรทัด signOut() ออกได้
+      await _googleSignIn.signOut(); 
       return; // จบการทำงานทันที
     }
 
@@ -415,7 +420,7 @@ class _LoginPageState extends State<LoginPage> {
                 textAlign: TextAlign.center,
                 maxLength: 15,
                 // รับค่าเป็นตัวเลขเท่านั้น
-                keyboardType: TextInputType.number,
+                //keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'รหัสนักศึกษา',
                   border: OutlineInputBorder(),
@@ -483,7 +488,7 @@ class _LoginPageState extends State<LoginPage> {
                   label: Text(
                     _isOtpSent
                         ? 'ยืนยัน OTP เพื่อเข้าสู่ระบบ'
-                        : 'เลือกอีเมลในเครื่องเพื่อรับOTP',
+                        : 'เลือกอีเมลเพื่อรับOTP',
                     style: const TextStyle(fontSize: 15),
                   ),
                   onPressed: loading
